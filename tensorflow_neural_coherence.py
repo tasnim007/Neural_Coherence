@@ -27,10 +27,6 @@ def forward_propagation(X_positive, X_negative, vocab, E, print_=False):
 
     """
 
-    ## Placeholders
-    # X_positive = tf.placeholder(tf.int32, shape = [None, 2000]) #opts.maxlen=2000
-    # X_negative = tf.placeholder(tf.int32, shape = [None, 2000]) #opts.maxlen=2000
-
     ## First Layer of NN: Transform each grammatical role in the grid into distributed representation - a real valued vector
 
     # Shared embedding matrix
@@ -268,7 +264,7 @@ def random_mini_batches(X, Y, mini_batch_size=32):
 
 if __name__ == '__main__':
     # parse user input
-    print("Starting...")
+    print("Starting...1:42")
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
@@ -351,18 +347,11 @@ if __name__ == '__main__':
     print('.....................................')
 
 
-
-
     #randomly shuffle the training data
     np.random.seed(113)
     np.random.shuffle(X_train_1)
     np.random.seed(113)
     np.random.shuffle(X_train_0)
-
-
-
-
-
 
 
     ## Create Placeholders
@@ -405,13 +394,14 @@ if __name__ == '__main__':
 
             minibatch_cost = 0.
             num_minibatches = int(m / opts.minibatch_size) # number of minibatches of size minibatch_size in the train set
-            minibatches = random_mini_batches(X_train_1, X_train_0, opts.minibatch_size)
+            #minibatches = random_mini_batches(X_train_1, X_train_0, opts.minibatch_size)
+            minibatches = mini_batches(X_train_1, X_train_0, opts.minibatch_size)
 
             for (i, minibatch) in enumerate(minibatches):
 
                 (minibatch_X_positive, minibatch_X_negative) = minibatch
 
-                _ , temp_cost, pos, neg = sess.run([optimizer, cost, score_positive, score_negative],
+                _, temp_cost, pos, neg = sess.run([optimizer, cost, score_positive, score_negative],
                             feed_dict={X_positive:minibatch_X_positive,
                                     X_negative:minibatch_X_negative})
                 """
@@ -458,7 +448,7 @@ if __name__ == '__main__':
 
             losses = tf.less(score_positive, score_negative)
             number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
-
+            
             for (i, minibatch) in enumerate(minibatches):
 
                 (minibatch_X_positive, minibatch_X_negative) = minibatch
@@ -486,14 +476,14 @@ if __name__ == '__main__':
             #test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
 
             print("\n\n")
-            print("***********Epoch: ",epoch,"  ******************")
+            print("***********Epoch: ", epoch, "  ******************")
 
             print("Wins: ", wins_count)
             print("Ties: ", ties_count)
             print("losses: ", losses_count)
 
-            print("Test Accuracy:", accuracy)
-            print("Test F1 Score:", f1)
+            print(" -Test Accuracy:", accuracy)
+            print(" -Test F1 Score:", f1)
 
             #"""
 
