@@ -9,7 +9,7 @@ import math
 #np.set_printoptions(threshold=np.nan)
 
 
-def forward_propagation(X_positive, X_negative, vocab, E, print_=False):
+def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
     """
     Implements forward propagation of Neural coherence model
 
@@ -18,6 +18,7 @@ def forward_propagation(X_positive, X_negative, vocab, E, print_=False):
     X_negative -- A Placeholder for negative document
     vocab -- Vocabulary list of entire entity grid list
     E -- initialized values for embedding matrix
+    mode -- whether we are in training: mode=True or testing: mode=False.
     print_ -- Whether size of the variables to be printed
 
     Returns:
@@ -63,14 +64,30 @@ def forward_propagation(X_positive, X_negative, vocab, E, print_=False):
     conv_layer_1_positive = tf.nn.conv1d(embedding_positive, W_conv_layer_1, stride=1,
                                          padding="VALID")  # embedding and W_conv_layer_1 both are 3D matrix
     conv_layer_1_with_bias_positive = tf.nn.bias_add(conv_layer_1_positive, b_conv_layer_1)
-    h_conv_layer_1_positive = tf.nn.relu(conv_layer_1_with_bias_positive,
+
+    conv_layer_1_with_bn_positive = tf.layers.batch_normalization(conv_layer_1_with_bias_positive,
+                                                                  axis=2,
+                                                                  center=True,
+                                                                  scale=False,
+                                                                  training=(mode == tf.estimator.ModeKeys.TRAIN)
+                                                                  )
+
+    h_conv_layer_1_positive = tf.nn.relu(conv_layer_1_with_bn_positive,
                                          name="relu_conv_layer_1_positive")  # Apply nonlinearity
 
     # 1D Convolution for negative document
     conv_layer_1_negative = tf.nn.conv1d(embedding_negative, W_conv_layer_1, stride=1,
                                          padding="VALID")  # embedding and W_conv_layer_1 both are 3D matrix
     conv_layer_1_with_bias_negative = tf.nn.bias_add(conv_layer_1_negative, b_conv_layer_1)
-    h_conv_layer_1_negative = tf.nn.relu(conv_layer_1_with_bias_negative,
+
+    conv_layer_1_with_bn_negative = tf.layers.batch_normalization(conv_layer_1_with_bias_negative,
+                                                                  axis=2,
+                                                                  center=True,
+                                                                  scale=False,
+                                                                  training=(mode == tf.estimator.ModeKeys.TRAIN)
+                                                                  )
+
+    h_conv_layer_1_negative = tf.nn.relu(conv_layer_1_with_bn_negative,
                                          name="relu_conv_layer_1_negative")  # Apply nonlinearity
 
     ## Third Layer of NN: Pooling Layer
@@ -183,14 +200,15 @@ def ranking_loss(pos, neg):
     return tf.reduce_mean(loss)
 
 
-def mini_batches(X, Y, mini_batch_size=32):
+def mini_batches(X, Y, mini_batch_size=32, shuffle=False):
     """
     Creates a list of minibatches from (X, Y)
 
     Arguments:
     X -- Positive Documents
     Y -- Negative Documents
-    mini_batch_size -- Size of each mini batch.
+    mini_batch_size -- Size of each mini batch
+    shuffle -- whether to shuffle the data before creating minibatches
 
     Returns:
     list of mini batches from the positive and negative documents.
@@ -199,18 +217,27 @@ def mini_batches(X, Y, mini_batch_size=32):
     m = X.shape[0]
     mini_batches = []
 
+    if(shuffle):
+        permutation = list(np.random.permutation(m))
+        shuffled_X = X[permutation, :]
+        shuffled_Y = Y[permutation, :]
+    else:
+        shuffled_X = X
+        shuffled_Y = Y
+
+
     num_complete_minibatches = math.floor(m / mini_batch_size)
 
     for k in range(0, num_complete_minibatches):
-        mini_batch_X = X[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
-        mini_batch_Y = Y[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
+        mini_batch_X = shuffled_X[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
+        mini_batch_Y = shuffled_Y[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
         mini_batch = (mini_batch_X, mini_batch_Y)
         mini_batches.append(mini_batch)
 
     # Handling the end case (last mini-batch < mini_batch_size)
     if m % mini_batch_size != 0:
-        mini_batch_X = X[num_complete_minibatches * mini_batch_size: m, :]
-        mini_batch_Y = Y[num_complete_minibatches * mini_batch_size: m, :]
+        mini_batch_X = shuffled_X[num_complete_minibatches * mini_batch_size: m, :]
+        mini_batch_Y = shuffled_Y[num_complete_minibatches * mini_batch_size: m, :]
         mini_batch = (mini_batch_X, mini_batch_Y)
         mini_batches.append(mini_batch)
 
@@ -264,7 +291,7 @@ def random_mini_batches(X, Y, mini_batch_size=32):
 
 if __name__ == '__main__':
     # parse user input
-    print("Starting...1:42")
+    print("Starting...6:12")
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
@@ -312,6 +339,11 @@ if __name__ == '__main__':
 
     opts, args = parser.parse_args(sys.argv)
 
+    print("**Hyperparameters**")
+    print("minibatch_size: ", opts.minibatch_size, "  dropout_ratio: ", opts.dropout_ratio,
+          "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size: ", opts.emb_size, "  hidden_size: ",
+          opts.hidden_size, "  nb_filter: ", opts.nb_filter, "  w_size: ", opts.w_size,
+          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num)
 
     print('Loading vocab of the whole dataset...')
     vocab = data_helper.load_all(filelist="data/wsj.all")
@@ -357,9 +389,10 @@ if __name__ == '__main__':
     ## Create Placeholders
     X_positive = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for positive document
     X_negative = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for negative document
+    mode = tf.placeholder(tf.bool, name='mode')
 
     # Forward propagation
-    score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, print_=True)
+    score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, mode, print_=True)
 
 
 
@@ -403,7 +436,8 @@ if __name__ == '__main__':
 
                 _, temp_cost, pos, neg = sess.run([optimizer, cost, score_positive, score_negative],
                             feed_dict={X_positive:minibatch_X_positive,
-                                    X_negative:minibatch_X_negative})
+                                    X_negative:minibatch_X_negative,
+                                       mode:True})
                 """
                 print("Epoch:", epoch, "Minibatch:", i) 
                 print("Positive score:")
@@ -453,7 +487,10 @@ if __name__ == '__main__':
 
                 (minibatch_X_positive, minibatch_X_negative) = minibatch
 
-                num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses], feed_dict={X_positive:minibatch_X_positive, X_negative:minibatch_X_negative})
+                num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
+                                                          feed_dict={X_positive:minibatch_X_positive,
+                                                                     X_negative:minibatch_X_negative,
+                                                                     mode:False})
 
                 wins_count += num_wins
                 ties_count += num_ties
