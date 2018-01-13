@@ -90,7 +90,7 @@ if __name__ == '__main__':
     #fn = range(0,10) #using feature
     #vocab = data_helper.load_all(filelist="data/wsj.all",fn=fn)
     vocab = ['-', 'O', 'S', 'X', '0']
-    print vocab 
+    print(vocab)
 
     print("loading entity-gird for pos and neg documents...")
     X_train_1, X_train_0, E = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.4test", 
