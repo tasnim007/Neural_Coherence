@@ -62,14 +62,14 @@ if __name__ == '__main__':
 
         ,learn_alg      = "rmsprop" # sgd, adagrad, rmsprop, adadelta, adam (default)
         ,loss           = "ranking_loss" # hinge, squared_hinge, binary_crossentropy (default)
-        ,minibatch_size = 4
+        ,minibatch_size = 32
         ,dropout_ratio  = 0.5
 
-        ,maxlen         = 200
-        ,epochs         = 30
+        ,maxlen         = 14000
+        ,epochs         = 20
         ,emb_size       = 100
-        ,hidden_size    = 32
-        ,nb_filter      = 64
+        ,hidden_size    = 250
+        ,nb_filter      = 150
         ,w_size         = 6 
         ,pool_length    = 6 
         ,p_num          = 20
@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
     #fn = range(0,10) #using feature
     #vocab = data_helper.load_all(filelist="data/wsj.all",fn=fn)
-    vocab = ['-', 'O', 'S', 'X', '0']
+    vocab = ['S', 'O', 'X', '-', '0']
     print(vocab)
 
     print("loading entity-gird for pos and neg documents...")
