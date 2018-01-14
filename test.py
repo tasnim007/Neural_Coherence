@@ -33,118 +33,119 @@ def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
     # Shared embedding matrix
     # W_embedding = tf.get_variable("W_embedding", [len(vocab), 100], initializer = tf.contrib.layers.xavier_initializer()) #embedding matrix
     # E = np.float32(E) # DataType of E is float64, which is not in list of allowed values in conv1D. Allowed DataType: float16, float32
-    E = tf.convert_to_tensor(E, tf.float32)
-    W_embedding = tf.get_variable("W_embedding", initializer=E)  # embedding matrix
+    with tf.device('/gpu:2'):
+        E = tf.convert_to_tensor(E, tf.float32)
+        W_embedding = tf.get_variable("W_embedding", initializer=E)  # embedding matrix
 
-    # Look up layer
+        # Look up layer
 
-    # for positive document
-    embedding_positive = tf.nn.embedding_lookup(W_embedding, X_positive)
+        # for positive document
+        embedding_positive = tf.nn.embedding_lookup(W_embedding, X_positive)
 
-    # for negative document
-    embedding_negative = tf.nn.embedding_lookup(W_embedding, X_negative)
+        # for negative document
+        embedding_negative = tf.nn.embedding_lookup(W_embedding, X_negative)
 
-    ## Second Layer of NN: Convolution Layer
+        ## Second Layer of NN: Convolution Layer
 
-    # shared filter and bias
-    # w_size = 6       #filter_size
-    # emb_size = 100   #embedding_size
-    # nb_filter = 150  #num_filters
+        # shared filter and bias
+        # w_size = 6       #filter_size
+        # emb_size = 100   #embedding_size
+        # nb_filter = 150  #num_filters
 
-    filter_shape = [opts.w_size, opts.emb_size, opts.nb_filter]
+        filter_shape = [opts.w_size, opts.emb_size, opts.nb_filter]
 
-    # W_conv_layer_1 = tf.get_variable("W_conv_layer_1", shape = filter_shape, initializer = tf.contrib.layers.xavier_initializer(seed = 0)) #filter for covolution layer 1
-    W_conv_layer_1 = tf.get_variable("W_conv_layer_1", shape=filter_shape,
+        # W_conv_layer_1 = tf.get_variable("W_conv_layer_1", shape = filter_shape, initializer = tf.contrib.layers.xavier_initializer(seed = 0)) #filter for covolution layer 1
+        W_conv_layer_1 = tf.get_variable("W_conv_layer_1", shape=filter_shape,
+                                         initializer=tf.contrib.layers.xavier_initializer(
+                                             seed=2018))  # filter for covolution layer 1
+        b_conv_layer_1 = tf.get_variable("b_conv_layer_1", shape=[opts.nb_filter],
+                                         initializer=tf.constant_initializer(0.0))  # bias for convolution layer 1
+
+        # 1D Convolution for positive document
+        conv_layer_1_positive = tf.nn.conv1d(embedding_positive, W_conv_layer_1, stride=1,
+                                             padding="VALID")  # embedding and W_conv_layer_1 both are 3D matrix
+        conv_layer_1_with_bias_positive = tf.nn.bias_add(conv_layer_1_positive, b_conv_layer_1)
+
+        conv_layer_1_with_bn_positive = tf.layers.batch_normalization(conv_layer_1_with_bias_positive,
+                                                                      axis=2,
+                                                                      center=True,
+                                                                      scale=False,
+                                                                      training=(mode == tf.estimator.ModeKeys.TRAIN)
+                                                                      )
+
+        h_conv_layer_1_positive = tf.nn.relu(conv_layer_1_with_bn_positive,
+                                             name="relu_conv_layer_1_positive")  # Apply nonlinearity
+
+        # 1D Convolution for negative document
+        conv_layer_1_negative = tf.nn.conv1d(embedding_negative, W_conv_layer_1, stride=1,
+                                             padding="VALID")  # embedding and W_conv_layer_1 both are 3D matrix
+        conv_layer_1_with_bias_negative = tf.nn.bias_add(conv_layer_1_negative, b_conv_layer_1)
+
+        conv_layer_1_with_bn_negative = tf.layers.batch_normalization(conv_layer_1_with_bias_negative,
+                                                                      axis=2,
+                                                                      center=True,
+                                                                      scale=False,
+                                                                      training=(mode == tf.estimator.ModeKeys.TRAIN)
+                                                                      )
+
+        h_conv_layer_1_negative = tf.nn.relu(conv_layer_1_with_bn_negative,
+                                             name="relu_conv_layer_1_negative")  # Apply nonlinearity
+
+        ## Third Layer of NN: Pooling Layer
+
+        # 1D Pooling for positive document
+        m_layer_1_positive = tf.nn.pool(h_conv_layer_1_positive, window_shape=[opts.pool_length], strides=[opts.pool_length],
+                                        pooling_type='MAX', padding="VALID")
+
+        # 1D Pooling for negative document
+        m_layer_1_negative = tf.nn.pool(h_conv_layer_1_negative, window_shape=[opts.pool_length], strides=[opts.pool_length],
+                                        pooling_type='MAX', padding="VALID")
+
+        ## Fourth Layer of NN: Fully Connected Layer
+
+        # Dropout Early [As Dat Used]
+
+        # for positive document
+        # drop_out_early_positive = tf.nn.dropout(m_layer_1_positive, keep_prob=0.5)
+
+        # for negative document
+        # drop_out_early_negative = tf.nn.dropout(m_layer_1_negative, keep_prob=0.5)
+
+        # Flatten
+
+        # for positive document
+        flatten_positive = tf.contrib.layers.flatten(m_layer_1_positive)
+        # flatten_positive = tf.contrib.layers.flatten(drop_out_early_positive)
+
+        # for negative document
+        flatten_negative = tf.contrib.layers.flatten(m_layer_1_negative)
+        # flatten_negative = tf.contrib.layers.flatten(drop_out_early_negative)
+
+        # Dropout
+
+        # for positive document
+        drop_out_positive = tf.nn.dropout(flatten_positive, keep_prob=opts.dropout_ratio, seed=2018)
+
+        # for negative document
+        drop_out_negative = tf.nn.dropout(flatten_negative, keep_prob=opts.dropout_ratio, seed=2018)
+
+        # Coherence Scoring
+        dim_coherence = drop_out_positive.shape[1]
+        v_fc_layer = tf.get_variable("v_fc_layer", shape=[dim_coherence, 1],
                                      initializer=tf.contrib.layers.xavier_initializer(
-                                         seed=2018))  # filter for covolution layer 1
-    b_conv_layer_1 = tf.get_variable("b_conv_layer_1", shape=[opts.nb_filter],
-                                     initializer=tf.constant_initializer(0.0))  # bias for convolution layer 1
+                                         seed=2018))  # Weight matrix for final layer
+        b_fc_layer = tf.get_variable("b_fc_layer", shape=[1],
+                                     initializer=tf.constant_initializer(0.0))  # bias for final layer
 
-    # 1D Convolution for positive document
-    conv_layer_1_positive = tf.nn.conv1d(embedding_positive, W_conv_layer_1, stride=1,
-                                         padding="VALID")  # embedding and W_conv_layer_1 both are 3D matrix
-    conv_layer_1_with_bias_positive = tf.nn.bias_add(conv_layer_1_positive, b_conv_layer_1)
+        # for positive document
+        # out_positive = tf.contrib.layers.fully_connected(drop_out_positive, num_outputs = 1, activation_fn=None)
+        # out_positive = tf.sigmoid(out_positive)
+        out_positive = tf.add(tf.matmul(drop_out_positive, v_fc_layer), b_fc_layer)
 
-    conv_layer_1_with_bn_positive = tf.layers.batch_normalization(conv_layer_1_with_bias_positive,
-                                                                  axis=2,
-                                                                  center=True,
-                                                                  scale=False,
-                                                                  training=(mode == tf.estimator.ModeKeys.TRAIN)
-                                                                  )
-
-    h_conv_layer_1_positive = tf.nn.relu(conv_layer_1_with_bn_positive,
-                                         name="relu_conv_layer_1_positive")  # Apply nonlinearity
-
-    # 1D Convolution for negative document
-    conv_layer_1_negative = tf.nn.conv1d(embedding_negative, W_conv_layer_1, stride=1,
-                                         padding="VALID")  # embedding and W_conv_layer_1 both are 3D matrix
-    conv_layer_1_with_bias_negative = tf.nn.bias_add(conv_layer_1_negative, b_conv_layer_1)
-
-    conv_layer_1_with_bn_negative = tf.layers.batch_normalization(conv_layer_1_with_bias_negative,
-                                                                  axis=2,
-                                                                  center=True,
-                                                                  scale=False,
-                                                                  training=(mode == tf.estimator.ModeKeys.TRAIN)
-                                                                  )
-
-    h_conv_layer_1_negative = tf.nn.relu(conv_layer_1_with_bn_negative,
-                                         name="relu_conv_layer_1_negative")  # Apply nonlinearity
-
-    ## Third Layer of NN: Pooling Layer
-
-    # 1D Pooling for positive document
-    m_layer_1_positive = tf.nn.pool(h_conv_layer_1_positive, window_shape=[opts.pool_length], strides=[opts.pool_length],
-                                    pooling_type='MAX', padding="VALID")
-
-    # 1D Pooling for negative document
-    m_layer_1_negative = tf.nn.pool(h_conv_layer_1_negative, window_shape=[opts.pool_length], strides=[opts.pool_length],
-                                    pooling_type='MAX', padding="VALID")
-
-    ## Fourth Layer of NN: Fully Connected Layer
-
-    # Dropout Early [As Dat Used]
-
-    # for positive document
-    # drop_out_early_positive = tf.nn.dropout(m_layer_1_positive, keep_prob=0.5)
-
-    # for negative document
-    # drop_out_early_negative = tf.nn.dropout(m_layer_1_negative, keep_prob=0.5)
-
-    # Flatten
-
-    # for positive document
-    flatten_positive = tf.contrib.layers.flatten(m_layer_1_positive)
-    # flatten_positive = tf.contrib.layers.flatten(drop_out_early_positive)
-
-    # for negative document
-    flatten_negative = tf.contrib.layers.flatten(m_layer_1_negative)
-    # flatten_negative = tf.contrib.layers.flatten(drop_out_early_negative)
-
-    # Dropout
-
-    # for positive document
-    drop_out_positive = tf.nn.dropout(flatten_positive, keep_prob=opts.dropout_ratio, seed=2018)
-
-    # for negative document
-    drop_out_negative = tf.nn.dropout(flatten_negative, keep_prob=opts.dropout_ratio, seed=2018)
-
-    # Coherence Scoring
-    dim_coherence = drop_out_positive.shape[1]
-    v_fc_layer = tf.get_variable("v_fc_layer", shape=[dim_coherence, 1],
-                                 initializer=tf.contrib.layers.xavier_initializer(
-                                     seed=2018))  # Weight matrix for final layer
-    b_fc_layer = tf.get_variable("b_fc_layer", shape=[1],
-                                 initializer=tf.constant_initializer(0.0))  # bias for final layer
-
-    # for positive document
-    # out_positive = tf.contrib.layers.fully_connected(drop_out_positive, num_outputs = 1, activation_fn=None)
-    # out_positive = tf.sigmoid(out_positive)
-    out_positive = tf.add(tf.matmul(drop_out_positive, v_fc_layer), b_fc_layer)
-
-    # for negative document
-    # out_negative = tf.contrib.layers.fully_connected(drop_out_negative, num_outputs = 1, activation_fn=None)
-    # out_negative = tf.sigmoid(out_negative)
-    out_negative = tf.add(tf.matmul(drop_out_negative, v_fc_layer), b_fc_layer)
+        # for negative document
+        # out_negative = tf.contrib.layers.fully_connected(drop_out_negative, num_outputs = 1, activation_fn=None)
+        # out_negative = tf.sigmoid(out_negative)
+        out_negative = tf.add(tf.matmul(drop_out_negative, v_fc_layer), b_fc_layer)
 
     parameters = {"W_embedding": W_embedding,
                   "W_conv_layer_1": W_conv_layer_1,
