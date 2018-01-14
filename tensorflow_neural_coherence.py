@@ -18,7 +18,7 @@ def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
     X_negative -- A Placeholder for negative document
     vocab -- Vocabulary list of entire entity grid list
     E -- initialized values for embedding matrix
-    mode -- whether we are in training: mode=True or testing: mode=False.
+    mode -- whether we are in training: mode=True or testing: mode=False [Used in Batch Normalization].
     print_ -- Whether size of the variables to be printed
 
     Returns:
@@ -53,10 +53,12 @@ def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
 
     filter_shape = [opts.w_size, opts.emb_size, opts.nb_filter]
 
+    regularizer = tf.contrib.layers.l2_regularizer(scale=0.1)  #l2 regularizer for filter
+
     # W_conv_layer_1 = tf.get_variable("W_conv_layer_1", shape = filter_shape, initializer = tf.contrib.layers.xavier_initializer(seed = 0)) #filter for covolution layer 1
     W_conv_layer_1 = tf.get_variable("W_conv_layer_1", shape=filter_shape,
                                      initializer=tf.contrib.layers.xavier_initializer(
-                                         seed=2018))  # filter for covolution layer 1
+                                         seed=2018), regularizer=regularizer)  # filter for covolution layer 1
     b_conv_layer_1 = tf.get_variable("b_conv_layer_1", shape=[opts.nb_filter],
                                      initializer=tf.constant_initializer(0.0))  # bias for convolution layer 1
 
@@ -195,7 +197,7 @@ def ranking_loss(pos, neg):
 
     """
 
-    loss = tf.maximum(1.0 + neg - pos, 0.0)
+    loss = tf.maximum(opts.margin + neg - pos, 0.0)
     # print(loss)
     return tf.reduce_mean(loss)
 
@@ -295,14 +297,15 @@ if __name__ == '__main__':
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
+    #[chijkqruvxyz] [ABDEGHIJKLMNOQRSTUVWXYZ]
     parser.add_option("-g", "--log-file",   dest="log_file", help="log file [default: %default]")
     parser.add_option("-d", "--data-dir",   dest="data_dir", help="directory containing list of train, test and dev file [default: %default]")
     parser.add_option("-m", "--model-dir",  dest="model_dir", help="directory to save the best models [default: %default]")
 
-    parser.add_option("-t", "--max-length", dest="maxlen", type="int", help="maximul length (for fixed size input) [default: %default]") # input size
+    parser.add_option("-t", "--max-length",        dest="maxlen", type="int", help="maximul length (for fixed size input) [default: %default]") # input size
     parser.add_option("-f", "--nb_filter",         dest="nb_filter",     type="int",   help="nb of filter to be applied in convolution over words [default: %default]")
-    #parser.add_option("-r", "--filter_length",     dest="filter_length", type="int",   help="length of neighborhood in words [default: %default]")
-    parser.add_option("-w", "--w_size",         dest="w_size", type="int",   help="window size length of neighborhood in words [default: %default]")
+    #parser.add_option("-r", "--filter_length",    dest="filter_length", type="int",   help="length of neighborhood in words [default: %default]")
+    parser.add_option("-w", "--w_size",            dest="w_size", type="int",   help="window size length of neighborhood in words [default: %default]")
     parser.add_option("-p", "--pool_length",       dest="pool_length",   type="int",   help="length for max pooling [default: %default]")
     parser.add_option("-e", "--emb-size",          dest="emb_size",      type="int",   help="dimension of embedding [default: %default]")
     parser.add_option("-s", "--hidden-size",       dest="hidden_size",   type="int",   help="hidden layer size [default: %default]")
@@ -311,9 +314,11 @@ if __name__ == '__main__':
     parser.add_option("-a", "--learning-algorithm", dest="learn_alg", help="optimization algorithm (adam, sgd, adagrad, rmsprop, adadelta) [default: %default]")
     parser.add_option("-b", "--minibatch-size",     dest="minibatch_size", type="int", help="minibatch size [default: %default]")
     parser.add_option("-l", "--loss",               dest="loss", help="loss type (hinge, squared_hinge, binary_crossentropy) [default: %default]")
-    parser.add_option("-n", "--epochs",             dest="epochs", type="int", help="nb of epochs [default: %default]")
-    parser.add_option("-P", "--permutation",        dest="p_num", type="int", help="nb of permutation[default: %default]")
+    parser.add_option("-n", "--epochs",       dest="epochs", type="int", help="nb of epochs [default: %default]")
+    parser.add_option("-P", "--permutation",  dest="p_num", type="int", help="nb of permutation[default: %default]")
     parser.add_option("-F", "--feats",        dest="f_list", help="semantic features using in the model, separate by . [default: %default]")
+    parser.add_option("-S", "--seed",         dest="seed", type="int", help="seed for random number. [default: %default]")
+    parser.add_option("-C", "--margin",       dest="margin", type="int", help="margin of the ranking objective. [default: %default]")
 
     parser.set_defaults(
 
@@ -335,6 +340,9 @@ if __name__ == '__main__':
         ,pool_length    = 6
         ,p_num          = 20
         ,f_list         = "" #"0.1.3"
+
+        ,seed           = 2018
+        ,margin         = 1
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -343,7 +351,7 @@ if __name__ == '__main__':
     print("minibatch_size: ", opts.minibatch_size, "  dropout_ratio: ", opts.dropout_ratio,
           "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size: ", opts.emb_size, "  hidden_size: ",
           opts.hidden_size, "  nb_filter: ", opts.nb_filter, "  w_size: ", opts.w_size,
-          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num)
+          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin)
 
     print('Loading vocab of the whole dataset...')
     vocab = data_helper.load_all(filelist="data/wsj.all")
