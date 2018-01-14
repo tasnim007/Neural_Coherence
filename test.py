@@ -387,12 +387,14 @@ if __name__ == '__main__':
 
 
     ## Create Placeholders
+
     X_positive = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for positive document
     X_negative = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for negative document
     mode = tf.placeholder(tf.bool, name='mode')
 
     # Forward propagation
-    score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, mode, print_=True)
+    with tf.device_scope('/gpu:2'):
+        score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, mode, print_=True)
 
 
 
