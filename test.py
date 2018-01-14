@@ -393,8 +393,7 @@ if __name__ == '__main__':
     mode = tf.placeholder(tf.bool, name='mode')
 
     # Forward propagation
-    with tf.device_scope('/gpu:2'):
-        score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, mode, print_=True)
+    score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, mode, print_=True)
 
 
 
@@ -421,7 +420,7 @@ if __name__ == '__main__':
 
     m = num_train
 
-    with tf.Session() as sess:
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)) as sess:
 
         sess.run(init)
 
