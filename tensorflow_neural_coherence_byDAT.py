@@ -226,7 +226,7 @@ def mini_batches(X, Y, mini_batch_size=32, shuffle=False):
         shuffled_Y = Y
 
 
-    num_complete_minibatches = math.floor(m / mini_batch_size)
+    num_complete_minibatches = int(math.floor(m / mini_batch_size))
 
     for k in range(0, num_complete_minibatches):
         mini_batch_X = shuffled_X[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
