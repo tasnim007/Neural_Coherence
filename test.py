@@ -420,109 +420,109 @@ if __name__ == '__main__':
     init = tf.global_variables_initializer()
 
     m = num_train
-    with tf.device('/gpu:2'):
-        with tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)) as sess:
+    
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)) as sess:
 
-            sess.run(init)
+        sess.run(init)
 
-            for epoch in range(opts.epochs):
+        for epoch in range(opts.epochs):
 
-                minibatch_cost = 0.
-                num_minibatches = int(m / opts.minibatch_size) # number of minibatches of size minibatch_size in the train set
-                #minibatches = random_mini_batches(X_train_1, X_train_0, opts.minibatch_size)
-                minibatches = mini_batches(X_train_1, X_train_0, opts.minibatch_size)
+            minibatch_cost = 0.
+            num_minibatches = int(m / opts.minibatch_size) # number of minibatches of size minibatch_size in the train set
+            #minibatches = random_mini_batches(X_train_1, X_train_0, opts.minibatch_size)
+            minibatches = mini_batches(X_train_1, X_train_0, opts.minibatch_size)
 
-                for (i, minibatch) in enumerate(minibatches):
+            for (i, minibatch) in enumerate(minibatches):
 
-                    (minibatch_X_positive, minibatch_X_negative) = minibatch
+                (minibatch_X_positive, minibatch_X_negative) = minibatch
 
-                    _, temp_cost, pos, neg = sess.run([optimizer, cost, score_positive, score_negative],
-                                feed_dict={X_positive:minibatch_X_positive,
-                                        X_negative:minibatch_X_negative,
-                                           mode:True})
-                    """
-                    print("Epoch:", epoch, "Minibatch:", i) 
-                    print("Positive score:")
-                    print(pos) 
-                    print("Negative score:")
-                    print(neg)
-                    print("ranking loss:", temp_cost)
-                    
-                    print("*************** End of a minibatch **********************************")
-                    """
-                    #print("Iteration ",i, ":  ",temp_cost)
-                    #minibatch_cost += temp_cost / num_minibatches
-
-                    """
-                    #print(tf.trainable_variables())
-                    
-                    variables_names = [v.name for v in tf.trainable_variables()]
-                    values = sess.run(variables_names)
-                    for k, v in zip(variables_names, values):
-                        print("Variable: ", k)
-                        print("Shape: ", v.shape)
-                        #print(v)
-                    """
-                #print(minibatch_cost)
-                #print("******************* End of an epoch ******************************")
-                #print("******************* End of Training ******************************")
-
-
-                #num_minibatches = int(m / minibatch_size) # number of minibatches of size minibatch_size in the train set
-                #"""
-                wins_count = 0
-                ties_count = 0
-                losses_count = 0
-
-                minibatches = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
-
-                wins = tf.greater(score_positive, score_negative)
-                number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
-
-                ties = tf.equal(score_positive, score_negative)
-                number_ties = tf.reduce_sum(tf.cast(ties, tf.int32))
-
-                losses = tf.less(score_positive, score_negative)
-                number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
+                _, temp_cost, pos, neg = sess.run([optimizer, cost, score_positive, score_negative],
+                            feed_dict={X_positive:minibatch_X_positive,
+                                    X_negative:minibatch_X_negative,
+                                       mode:True})
+                """
+                print("Epoch:", epoch, "Minibatch:", i) 
+                print("Positive score:")
+                print(pos) 
+                print("Negative score:")
+                print(neg)
+                print("ranking loss:", temp_cost)
                 
-                for (i, minibatch) in enumerate(minibatches):
+                print("*************** End of a minibatch **********************************")
+                """
+                #print("Iteration ",i, ":  ",temp_cost)
+                #minibatch_cost += temp_cost / num_minibatches
 
-                    (minibatch_X_positive, minibatch_X_negative) = minibatch
-
-                    num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
-                                                              feed_dict={X_positive:minibatch_X_positive,
-                                                                         X_negative:minibatch_X_negative,
-                                                                         mode:False})
-
-                    wins_count += num_wins
-                    ties_count += num_ties
-                    losses_count += num_losses
-
-
-
-                recall = wins_count/(wins_count + ties_count + losses_count)
-
-                precision = wins_count/(wins_count+losses_count)
-
-                f1 = 2*precision*recall/(precision+recall)
-
-                accuracy = wins_count/(wins_count + ties_count + losses_count)
+                """
+                #print(tf.trainable_variables())
+                
+                variables_names = [v.name for v in tf.trainable_variables()]
+                values = sess.run(variables_names)
+                for k, v in zip(variables_names, values):
+                    print("Variable: ", k)
+                    print("Shape: ", v.shape)
+                    #print(v)
+                """
+            #print(minibatch_cost)
+            #print("******************* End of an epoch ******************************")
+            #print("******************* End of Training ******************************")
 
 
-                #test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+            #num_minibatches = int(m / minibatch_size) # number of minibatches of size minibatch_size in the train set
+            #"""
+            wins_count = 0
+            ties_count = 0
+            losses_count = 0
 
-                #accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
-                #test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+            minibatches = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
 
-                print("\n\n")
-                print("***********Epoch: ", epoch, "  ******************")
+            wins = tf.greater(score_positive, score_negative)
+            number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
 
-                print("Wins: ", wins_count)
-                print("Ties: ", ties_count)
-                print("losses: ", losses_count)
+            ties = tf.equal(score_positive, score_negative)
+            number_ties = tf.reduce_sum(tf.cast(ties, tf.int32))
 
-                print(" -Test Accuracy:", accuracy)
-                print(" -Test F1 Score:", f1)
+            losses = tf.less(score_positive, score_negative)
+            number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
+            
+            for (i, minibatch) in enumerate(minibatches):
+
+                (minibatch_X_positive, minibatch_X_negative) = minibatch
+
+                num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
+                                                          feed_dict={X_positive:minibatch_X_positive,
+                                                                     X_negative:minibatch_X_negative,
+                                                                     mode:False})
+
+                wins_count += num_wins
+                ties_count += num_ties
+                losses_count += num_losses
+
+
+
+            recall = wins_count/(wins_count + ties_count + losses_count)
+
+            precision = wins_count/(wins_count+losses_count)
+
+            f1 = 2*precision*recall/(precision+recall)
+
+            accuracy = wins_count/(wins_count + ties_count + losses_count)
+
+
+            #test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+
+            #accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+            #test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+
+            print("\n\n")
+            print("***********Epoch: ", epoch, "  ******************")
+
+            print("Wins: ", wins_count)
+            print("Ties: ", ties_count)
+            print("losses: ", losses_count)
+
+            print(" -Test Accuracy:", accuracy)
+            print(" -Test F1 Score:", f1)
 
             #"""
 
