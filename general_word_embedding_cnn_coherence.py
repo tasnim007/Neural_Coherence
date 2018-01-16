@@ -285,10 +285,10 @@ if __name__ == '__main__':
         ,learn_alg      = "rmsprop" # sgd, adagrad, rmsprop, adadelta, adam (default)
         ,loss           = "ranking_loss" # hinge, squared_hinge, binary_crossentropy (default)
         ,minibatch_size = 32
-        ,dropout_ratio  = 0.5
+        ,dropout_ratio  = 1
 
-        ,maxlen         = 20000
-        ,epochs         = 2
+        ,maxlen         = 25000
+        ,epochs         = 1
         ,emb_size       = 300
         ,hidden_size    = 250
         ,nb_filter      = 150
@@ -325,6 +325,8 @@ if __name__ == '__main__':
     X_test_1, X_test_0, vocab_info_test = new_data_helper.load_and_numberize_egrids_word_entity(filelist="./data/wsj.test",
         maxlen=opts.maxlen, w_size=opts.w_size, vocabs=vocabs)
 
+    X_train_1 = np.concatenate((X_train_1, X_dev_1), axis=0)
+    X_train_0 = np.concatenate((X_train_0, X_dev_0), axis=0)
 
     num_train = len(X_train_1)
     num_dev   = len(X_dev_1)
@@ -335,7 +337,7 @@ if __name__ == '__main__':
     y_test_1 = [1] * num_test
 
     print('.....................................')
-    print("Num of traing pairs: " + str(num_train))
+    print("Num of train pairs: " + str(num_train))
     print("Num of dev pairs: " + str(num_dev))
     print("Num of test pairs: " + str(num_test))
     #print("Num of permutation in train: " + str(opts.p_num))
@@ -430,18 +432,75 @@ if __name__ == '__main__':
                     print("Shape: ", v.shape)
                     #print(v)
                 """
+
+                if ((i+1)%200) == 0:
+
+                    # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+                    ########################Test Begins#####################################################
+                    wins_count = 0
+                    ties_count = 0
+                    losses_count = 0
+
+                    minibatches_test = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+
+                    wins = tf.greater(score_positive, score_negative)
+                    number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
+
+                    ties = tf.equal(score_positive, score_negative)
+                    number_ties = tf.reduce_sum(tf.cast(ties, tf.int32))
+
+                    losses = tf.less(score_positive, score_negative)
+                    number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
+
+                    for (j, minibatch_test) in enumerate(minibatches_test):
+                        (minibatch_X_positive, minibatch_X_negative) = minibatch_test
+
+                        num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
+                                                                  feed_dict={X_positive: minibatch_X_positive,
+                                                                             X_negative: minibatch_X_negative,
+                                                                             mode: False})
+
+                        wins_count += num_wins
+                        ties_count += num_ties
+                        losses_count += num_losses
+
+                    recall = wins_count / (wins_count + ties_count + losses_count)
+
+                    precision = wins_count / (wins_count + losses_count)
+
+                    f1 = 2 * precision * recall / (precision + recall)
+
+                    accuracy = wins_count / (wins_count + ties_count + losses_count)
+
+                    # test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+
+                    # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+                    # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+
+                    print("\n\n")
+                    print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
+
+                    print("Wins: ", wins_count)
+                    print("Ties: ", ties_count)
+                    print("losses: ", losses_count)
+
+                    print(" -Test Accuracy:", accuracy)
+                    print(" -Test F1 Score:", f1)
+
+                    ########################Test Ends#####################################################
+                    # """
+
             #print(minibatch_cost)
             #print("******************* End of an epoch ******************************")
             #print("******************* End of Training ******************************")
 
-
-            #num_minibatches = int(m / minibatch_size) # number of minibatches of size minibatch_size in the train set
-            #"""
+            # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+            ########################Test Begins#####################################################
             wins_count = 0
             ties_count = 0
             losses_count = 0
 
-            minibatches = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+            minibatches_test = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
 
             wins = tf.greater(score_positive, score_negative)
             number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
@@ -451,38 +510,34 @@ if __name__ == '__main__':
 
             losses = tf.less(score_positive, score_negative)
             number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
-            
-            for (i, minibatch) in enumerate(minibatches):
 
-                (minibatch_X_positive, minibatch_X_negative) = minibatch
+            for (j, minibatch_test) in enumerate(minibatches_test):
+                (minibatch_X_positive, minibatch_X_negative) = minibatch_test
 
                 num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
-                                                          feed_dict={X_positive:minibatch_X_positive,
-                                                                     X_negative:minibatch_X_negative,
-                                                                     mode:False})
+                                                          feed_dict={X_positive: minibatch_X_positive,
+                                                                     X_negative: minibatch_X_negative,
+                                                                     mode: False})
 
                 wins_count += num_wins
                 ties_count += num_ties
                 losses_count += num_losses
 
+            recall = wins_count / (wins_count + ties_count + losses_count)
 
+            precision = wins_count / (wins_count + losses_count)
 
-            recall = wins_count/(wins_count + ties_count + losses_count)
+            f1 = 2 * precision * recall / (precision + recall)
 
-            precision = wins_count/(wins_count+losses_count)
+            accuracy = wins_count / (wins_count + ties_count + losses_count)
 
-            f1 = 2*precision*recall/(precision+recall)
+            # test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
 
-            accuracy = wins_count/(wins_count + ties_count + losses_count)
-
-
-            #test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
-
-            #accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
-            #test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+            # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+            # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
 
             print("\n\n")
-            print("***********Epoch: ", epoch, "  ******************")
+            print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
 
             print("Wins: ", wins_count)
             print("Ties: ", ties_count)
@@ -491,5 +546,9 @@ if __name__ == '__main__':
             print(" -Test Accuracy:", accuracy)
             print(" -Test F1 Score:", f1)
 
-            #"""
+            ########################Test Ends#####################################################
+            # """
+
+            #num_minibatches = int(m / minibatch_size) # number of minibatches of size minibatch_size in the train set
+
 

@@ -44,12 +44,12 @@ def forward_propagation(X_positive_eName, X_negative_eName, X_positive_eType, X_
     # for positive document
     embedding_positive_eType = tf.nn.embedding_lookup(eType_embedding_matrix, X_positive_eType)
     embedding_positive_eName = tf.nn.embedding_lookup(eName_embedding_matrix, X_positive_eName)
-    embedding_positive = tf.concat([embedding_positive_eType, embedding_positive_eName], 1)
+    embedding_positive = tf.concat([embedding_positive_eType, embedding_positive_eName], 2)
 
     # for negative document
     embedding_negative_eType = tf.nn.embedding_lookup(eType_embedding_matrix, X_negative_eType)
     embedding_negative_eName = tf.nn.embedding_lookup(eName_embedding_matrix, X_negative_eName)
-    embedding_negative = tf.concat([embedding_negative_eType, embedding_negative_eName], 1)
+    embedding_negative = tf.concat([embedding_negative_eType, embedding_negative_eName], 2)
 
     ## Second Layer of NN: Convolution Layer
 
@@ -58,7 +58,7 @@ def forward_propagation(X_positive_eName, X_negative_eName, X_positive_eType, X_
     # emb_size = 100   #embedding_size
     # nb_filter = 150  #num_filters
 
-    filter_shape = [opts.w_size, opts.emb_size, opts.nb_filter]
+    filter_shape = [opts.w_size, opts.emb_size_eType+opts.emb_size_eName, opts.nb_filter]
 
     regularizer = tf.contrib.layers.l2_regularizer(scale=0.1)  #l2 regularizer for filter
 
@@ -267,11 +267,11 @@ def mini_batches(X, Y, mini_batch_size=32, shuffle=False):
 
 if __name__ == '__main__':
     # parse user input
-    print("Starting...6:12")
+    print("Starting...17:50")
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
-    #[chijkqruvxyz] [ABDEGHIJKLMNOQRSTUVWXYZ]
+    #[chijkqruvxyz] [ABDGHIJKLMNOQRSTUVWXYZ]
     parser.add_option("-g", "--log-file",   dest="log_file", help="log file [default: %default]")
     parser.add_option("-d", "--data-dir",   dest="data_dir", help="directory containing list of train, test and dev file [default: %default]")
     parser.add_option("-m", "--model-dir",  dest="model_dir", help="directory to save the best models [default: %default]")
@@ -281,7 +281,10 @@ if __name__ == '__main__':
     #parser.add_option("-r", "--filter_length",    dest="filter_length", type="int",   help="length of neighborhood in words [default: %default]")
     parser.add_option("-w", "--w_size",            dest="w_size", type="int",   help="window size length of neighborhood in words [default: %default]")
     parser.add_option("-p", "--pool_length",       dest="pool_length",   type="int",   help="length for max pooling [default: %default]")
-    parser.add_option("-e", "--emb-size",          dest="emb_size",      type="int",   help="dimension of embedding [default: %default]")
+
+    parser.add_option("-e", "--emb-size-eType",    dest="emb_size_eType",type="int",   help="dimension of embedding [default: %default]")
+    parser.add_option("-E", "--emb-size-eName",    dest="emb_size_eName",type="int",   help="dimension of embedding [default: %default]")
+
     parser.add_option("-s", "--hidden-size",       dest="hidden_size",   type="int",   help="hidden layer size [default: %default]")
     parser.add_option("-o", "--dropout_ratio",     dest="dropout_ratio", type="float", help="ratio of cells to drop out [default: %default]")
 
@@ -306,8 +309,9 @@ if __name__ == '__main__':
         ,dropout_ratio  = 1
 
         ,maxlen         = 20000
-        ,epochs         = 15
-        ,emb_size       = 100
+        ,epochs         = 2
+        ,emb_size_eType = 100
+        ,emb_size_eName = 300
         ,hidden_size    = 250
         ,nb_filter      = 150
         ,w_size         = 10
@@ -323,7 +327,7 @@ if __name__ == '__main__':
 
     print("\n\n**Hyperparameters**")
     print("minibatch_size: ", opts.minibatch_size, "  dropout_ratio: ", opts.dropout_ratio,
-          "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size: ", opts.emb_size, "  hidden_size: ",
+          "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size_eType: ", opts.emb_size_eType, "  emb_size_eName: ", opts.emb_size_eName, "  hidden_size: ",
           opts.hidden_size, "  nb_filter: ", opts.nb_filter, "  w_size: ", opts.w_size,
           "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin)
 
@@ -340,35 +344,35 @@ if __name__ == '__main__':
                                                                                             maxlen=opts.maxlen,
                                                                                             window_size=opts.w_size,
                                                                                             vocab_list=entity_type,
-                                                                                            emb_size=opts.emb_size)
+                                                                                            emb_size=opts.emb_size_eType)
 
     X_dev_1_eType, X_dev_0_eType, E_1 = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.dev",
                                                                                         perm_num=opts.p_num,
                                                                                         maxlen=opts.maxlen,
                                                                                         window_size=opts.w_size, E=E_1,
                                                                                         vocab_list=entity_type,
-                                                                                        emb_size=opts.emb_size)
+                                                                                        emb_size=opts.emb_size_eType)
 
     X_test_1_eType, X_test_0_eType, E_1 = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.test",
                                                                                           perm_num=opts.p_num,
                                                                                           maxlen=opts.maxlen,
                                                                                           window_size=opts.w_size, E=E_1,
                                                                                           vocab_list=entity_type,
-                                                                                          emb_size=opts.emb_size)
+                                                                                          emb_size=opts.emb_size_eType)
 
     print("loading entity-grid for pos and neg documents only entity names...")
 
     X_train_1_eName, X_train_0_eName, E_2 = data_helper.load_and_numberize_egrids_entity_names(
         filelist="./data/wsj.train",
-        maxlen=opts.maxlen, w_size=opts.w_size, vocabs=vocabs, emb_size=opts.emb_size)
+        maxlen=opts.maxlen, w_size=opts.w_size, vocabs=vocabs, emb_size=opts.emb_size_eName)
 
     X_dev_1_eName, X_dev_0_eName, E_2 = data_helper.load_and_numberize_egrids_entity_names(
         filelist="./data/wsj.dev",
-        maxlen=opts.maxlen, w_size=opts.w_size, E=E_2, vocabs=vocabs, emb_size=opts.emb_size)
+        maxlen=opts.maxlen, w_size=opts.w_size, E=E_2, vocabs=vocabs, emb_size=opts.emb_size_eName)
 
     X_test_1_eName, X_test_0_eName, E_2 = data_helper.load_and_numberize_egrids_entity_names(
         filelist="./data/wsj.test",
-        maxlen=opts.maxlen, w_size=opts.w_size, E=E_2, vocabs=vocabs, emb_size=opts.emb_size)
+        maxlen=opts.maxlen, w_size=opts.w_size, E=E_2, vocabs=vocabs, emb_size=opts.emb_size_eName)
 
 
 
@@ -398,14 +402,14 @@ if __name__ == '__main__':
 
     ## Create Placeholders
     X_positive_eName = tf.placeholder(tf.int32,
-                                      shape=[None, 2000])  # Placeholder for positive document with entity name
+                                      shape=[None, opts.maxlen])  # Placeholder for positive document with entity name
     X_negative_eName = tf.placeholder(tf.int32,
-                                      shape=[None, 2000])  # Placeholder for negative document with entity name
+                                      shape=[None, opts.maxlen])  # Placeholder for negative document with entity name
 
     X_positive_eType = tf.placeholder(tf.int32,
-                                      shape=[None, 2000])  # Placeholder for positive document with entity type
+                                      shape=[None, opts.maxlen])  # Placeholder for positive document with entity type
     X_negative_eType = tf.placeholder(tf.int32,
-                                      shape=[None, 2000])  # Placeholder for negative document with entity type
+                                      shape=[None, opts.maxlen])  # Placeholder for negative document with entity type
 
     mode = tf.placeholder(tf.bool, name='mode')  #Placeholder needed for batch normalization
 
