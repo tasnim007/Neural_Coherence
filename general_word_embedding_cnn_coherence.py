@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 #from utilities import my_callbacks
+from utilities import data_helper
 from utilities import new_data_helper
 import optparse
 import sys
@@ -275,30 +276,34 @@ if __name__ == '__main__':
     parser.add_option("-F", "--feats",        dest="f_list", help="semantic features using in the model, separate by . [default: %default]")
     parser.add_option("-S", "--seed",         dest="seed", type="int", help="seed for random number. [default: %default]")
     parser.add_option("-C", "--margin",       dest="margin", type="int", help="margin of the ranking objective. [default: %default]")
-
+    parser.add_option("-M", "--eval_minibatches", dest="eval_minibatches", type="int",
+                      help="How often we want to evaluate in an epoch. [default: %default]")
+    parser.add_option("-P", "--pretrained", dest="pretrained", type="boolean",
+                      help="How often we want to evaluate in an epoch. [default: %default]")
     parser.set_defaults(
 
-        data_dir        = "./data/"
-        ,log_file       = "log"
-        ,model_dir      = "./saved_models/"
+        data_dir="./data/"
+        , log_file="log"
+        , model_dir="./saved_models/"
 
-        ,learn_alg      = "rmsprop" # sgd, adagrad, rmsprop, adadelta, adam (default)
-        ,loss           = "ranking_loss" # hinge, squared_hinge, binary_crossentropy (default)
-        ,minibatch_size = 32
-        ,dropout_ratio  = 1
+        , learn_alg="rmsprop"  # sgd, adagrad, rmsprop, adadelta, adam (default)
+        , loss="ranking_loss"  # hinge, squared_hinge, binary_crossentropy (default)
+        , minibatch_size=32
+        , dropout_ratio=1
 
-        ,maxlen         = 25000
-        ,epochs         = 1
-        ,emb_size       = 300
-        ,hidden_size    = 250
-        ,nb_filter      = 150
-        ,w_size         = 10
-        ,pool_length    = 6
-        ,p_num          = 20
-        ,f_list         = "" #"0.1.3"
+        , maxlen=25000
+        , epochs=5
+        , emb_size=300
+        , hidden_size=250
+        , nb_filter=150
+        , w_size=10
+        , pool_length=6
+        , p_num=20
+        , f_list=""  # "0.1.3"
 
-        ,seed           = 2018
-        ,margin         = 6
+        , seed=2018
+        , margin=6
+        , eval_minibatches=100
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -307,7 +312,8 @@ if __name__ == '__main__':
     print("minibatch_size: ", opts.minibatch_size, "  dropout_ratio: ", opts.dropout_ratio,
           "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size: ", opts.emb_size, "  hidden_size: ",
           opts.hidden_size, "  nb_filter: ", opts.nb_filter, "  w_size: ", opts.w_size,
-          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin)
+          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed,
+          "  margin: ", opts.margin, "  eval_minibatches: ", opts.eval_minibatches)
 
     print('Loading vocab of the whole dataset...')
     entity_type = ['S', 'O', 'X', '-', '0']
@@ -324,6 +330,30 @@ if __name__ == '__main__':
 
     X_test_1, X_test_0, vocab_info_test = new_data_helper.load_and_numberize_egrids_word_entity(filelist="./data/wsj.test",
         maxlen=opts.maxlen, w_size=opts.w_size, vocabs=vocabs)
+
+
+    ###########Pretrained word embedding
+    if opts.pretrained:
+        vocab_0 = []
+        for ent in vocabs:
+            vocab_0.append(ent)
+            vocab_0.append(ent)
+            vocab_0.append(ent)
+
+        vocab_0.append("-")
+        vocab_0.append("0")
+
+        E = data_helper.load_pretrained_glove(vocabs=vocab_0, filename="./glove/glove.6B.300d.txt")
+        print("Shape of pretrained glove: ", E.shape)
+
+    else:
+        vocab_x = vocab_info_train["vocab_x"]
+        np.random.seed(2018)
+        E = 0.01 * np.random.uniform(-1.0, 1.0, (len(vocab_x), opts.emb_size))
+        E[len(vocabs) - 1] = 0
+
+    ###########################
+
 
     X_train_1 = np.concatenate((X_train_1, X_dev_1), axis=0)
     X_train_0 = np.concatenate((X_train_0, X_dev_0), axis=0)
@@ -357,10 +387,8 @@ if __name__ == '__main__':
     X_negative = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for negative document
     mode = tf.placeholder(tf.bool, name='mode')  #Placeholder needed for batch normalization
 
-    vocab_x = vocab_info_train["vocab_x"]
-    np.random.seed(2018)
-    E = 0.01 * np.random.uniform(-1.0, 1.0, (len(vocab_x), opts.emb_size))
-    E[len(vocabs) - 1] = 0
+
+
 
     # Forward propagation
     score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab_info_train, E, mode, print_=True)
@@ -433,7 +461,7 @@ if __name__ == '__main__':
                     #print(v)
                 """
 
-                if ((i+1)%200) == 0:
+                if ((i+1) % opts.eval_minibatches) == 0:
 
                     # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
                     ########################Test Begins#####################################################

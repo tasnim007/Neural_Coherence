@@ -7,38 +7,168 @@ import numpy as np
 import glob, os, csv, re
 from collections import Counter
 from keras.preprocessing import sequence
+import operator
 
-def find_doc_size(filename=""):
-    lines = [line.rstrip('\n') for line in open(filename)]    #The method rstrip() returns a copy of the string in which all chars have been stripped from the end of the string (default whitespace characters).
-    doc_size = find_len(sent=lines[1]) ##???##
-    return doc_size
 
-def find_len(sent=""):
+def init_vocab(filelist="list_of_grid.txt", occur=30):
+    #print("hello")
+    wordcount={}
+    list_of_files = [line.rstrip('\n') for line in open(filelist)]
+    for file in list_of_files:
+        #print(file) 
+        lines = [line.rstrip('\n') for line in open(file + ".EGrid")]
+        for line in lines:
+            ent = line.split()[0]
+            if ent not in wordcount:
+                wordcount[ent] = 1
+            else:
+                wordcount[ent] += 1
+    #print sorted(wordcount.items(), key=lambda x: x[1])
+
+    wordlist = sorted(wordcount.items(), key=operator.itemgetter(1), reverse=True)    # sorted by value
+    print("Number of entities: ", len(wordlist))
+    
+    n = int(len(wordlist) * occur / 100)
+    print("Using", n, "for training as", occur, "percentage")
+
+    wordlist = wordlist[0:n]
+    vocabs = []
+    for tup in wordlist:
+        vocabs.append(tup[0])    
+    vocabs.append("oov") # of our vocabulary word
+
+    return vocabs
+
+#loading grid with features
+def load_and_numberize_egrids_word_entity(filelist="list_of_grid.txt", maxlen=10000, w_size=3, E=None, vocabs=None, emb_size=300, perm_num=20):
+    # loading entiry-grid data from list of pos document and list of neg document
+    if vocabs is None:
+        print("Please input vocab list")
+        return None
+
+    list_of_files = [line.rstrip('\n') for line in open(filelist)]
+
+    # process postive gird, convert each file to be a sentence
+    sentences_1 = []
+    sentences_0 = []
+    
+    for file in list_of_files:
+        #print(file) 
+
+        lines = [line.rstrip('\n') for line in open(file + ".EGrid")]
+        #f_lines = [line.rstrip('\n') for line in open(file + ".Feats")]
+
+        grid_1 = "0 "* w_size
+
+        for idx, line in enumerate(lines):
+            e_trans = get_eTrans_with_Word(line, vocabs) # merge the grid of positive document  
+            if len(e_trans) !=0:
+                #print e_trans
+                grid_1 = grid_1 + e_trans + " " + "0 "* w_size
+
+        p_count = 0
+        for i in range(1,perm_num+1): # reading the permuted docs
+            permuted_lines = [p_line.rstrip('\n') for p_line in open(file+ ".EGrid" +"-"+str(i))]    
+            grid_0 = "0 "* w_size
+
+            for idx, p_line in enumerate(permuted_lines):
+                e_trans_0 = get_eTrans_with_Word(p_line, vocabs)
+                if len(e_trans_0) !=0:
+                    grid_0 = grid_0 + e_trans_0  + " " + "0 "* w_size
+
+            if grid_0 != grid_1: #check the duplication
+                p_count = p_count + 1
+                sentences_0.append(grid_0)
+            #else:
+            #    print(file+ ".EGrid" +"-"+str(i)) // print duplicates permuted docs with original
+        
+        for i in range (0, p_count): #stupid code
+            sentences_1.append(grid_1)
+
+    
+    assert len(sentences_0) == len(sentences_1)
+
+    vocab_x =[]
+    for ent in vocabs:
+        vocab_x.append(ent + "_S")
+        vocab_x.append(ent + "_O")
+        vocab_x.append(ent + "_X")
+
+    vocab_x.append("-")
+    vocab_x.append("0")
+    '''
+    vocab_idmap = {}
+    for i in range(len(vocab_x)):
+        vocab_idmap[vocab_x[i]] = i
+    '''
+    vocab_idmap = {}
+    idmap_vocab = {}
+    for i in range(len(vocab_x)):
+        vocab_idmap[vocab_x[i]] = i
+        idmap_vocab[i] = vocab_x[i]
+
+
+    # Numberize the sentences
+    X_1 = numberize_sentences(sentences_1, vocab_idmap)
+    X_0 = numberize_sentences(sentences_0, vocab_idmap)
+    
+    X_1 = adjust_index(X_1, maxlen=maxlen, window_size=w_size)
+    X_0 = adjust_index(X_0, maxlen=maxlen, window_size=w_size)
+
+    X_1 = sequence.pad_sequences(X_1, maxlen)
+    X_0 = sequence.pad_sequences(X_0, maxlen)
+
+    #print("vocab size: ",len(vocabs))
+    #print("vocab_x  size: ",len(vocab_x))
+    #print("vocab to idmap  size: ",len(vocab_idmap))
+    #print("idmap to vocab  size: ",len(idmap_vocab))
+
+    vocab_info = {"vocab_x": vocab_x,
+                  "vocab_idmap": vocab_idmap,
+                  "idmap_vocab": idmap_vocab}
+
+    '''
+    np.random.seed(2017)
+    E      = 0.01 * np.random.uniform( -1.0, 1.0, (len(vocab_x), emb_size))
+    E[len(vocab_x)-1] = 0
+    '''
+
+    return X_1, X_0, vocab_info
+
+
+
+def get_eTrans_with_Word(sent, vocabs):
     x = sent.split()
-    #print(x)
-    return len(x) -1
-
-def remove_entity(sent=""):
-    x = sent.split()
-    count = x.count('X') + x.count('S') + x.count('O') #counting the number of entities
-    if count <3: #remove lesss ferequent entities
-        return ""
-    x = x[1:] ##???##
-    return ' '.join(x)
-
-#get entity transition from a row of Entity Grid
-def get_eTrans(sent=""):
-    x = sent.split()
-    x = x[1:]
+    
     length = len(x)
-    e_occur = x.count('X') + x.count('S') + x.count('O') #counting the number of entities
+    e_occur = x.count('X') + x.count('S') + x.count('O') #counting the number of occurrence of entities
     if length > 80:
         if e_occur < 3:
             return ""
     elif length > 20:
         if e_occur < 2:
             return ""
-    return ' '.join(x)
+    
+    ent = x[0]
+    x = x[1:]
+    
+    new_x = []
+
+    for role in x:
+        if role != "-":
+            if ent in vocabs:
+                new_x.append(ent+"_"+role)
+            else:
+                new_x.append("ovv_"+ role)
+                
+        else:
+            new_x.append("-")
+
+    return ' '.join(new_x)
+
+
+
+#==================================================================================
 
 #get entity transition from a row of Entity Grid
 def get_eTrans_with_Feats(sent="",feats="",fn=None):
@@ -195,7 +325,7 @@ def load_all(filelist="list_of_grid.txt",fn=None):
     vocab = Counter()
 
     for file in list_of_files:
-        #print(file)
+#        print(file)
         lines = [line.rstrip('\n') for line in open(file + ".EGrid")]
         f_lines = [line.rstrip('\n') for line in open(file + ".Feats")]
 
@@ -210,7 +340,7 @@ def load_all(filelist="list_of_grid.txt",fn=None):
     vocab = dict (vocab)
     vocab_list = sorted (vocab.keys())
     vocab_list.append('0')
-    print("Total vocabulary size in the whole dataset: " + str (len(vocab)))
+    print( "Total vocabulary size in the whole dataset: " + str (len(vocab)))
 
     return vocab_list
 
@@ -277,7 +407,6 @@ def load_and_numberize_Egrid_with_Feats(filelist="list_of_grid.txt", perm_num = 
     X_1 = sequence.pad_sequences(X_1, maxlen)
     X_0 = sequence.pad_sequences(X_0, maxlen)
 
-    np.random.seed(2018)
     if E is None:
         E      = 0.01 * np.random.uniform( -1.0, 1.0, (len(vocab_list), emb_size))
         E[len(vocab_list)-1] = 0
@@ -377,7 +506,7 @@ def load_and_numberize_Egrid(filelist="list_of_grid.txt", perm_num = 3, maxlen=N
         e_count = 0
         for line in lines:
             # merge the grid of positive document 
-            e_trans = get_eTrans(sent=line)
+            e_trans = get_eTrans_with_Feats(sent=line)
             if len(e_trans) !=0:
                 grid_1 = grid_1 + e_trans + " " + "0 "* window_size
                 e_count = e_count + 1
@@ -387,7 +516,7 @@ def load_and_numberize_Egrid(filelist="list_of_grid.txt", perm_num = 3, maxlen=N
             permuted_lines = [p_line.rstrip('\n') for p_line in open(file+"-"+str(i))]    
             grid_0 = "0 "* window_size
             for p_line in permuted_lines:
-                e_trans_0 = get_eTrans(sent=p_line)
+                e_trans_0 = get_eTrans_with_Feats(sent=p_line)
                 if len(e_trans_0) !=0:
                     grid_0 = grid_0 + e_trans_0  + " " + "0 "* window_size
 
@@ -398,7 +527,7 @@ def load_and_numberize_Egrid(filelist="list_of_grid.txt", perm_num = 3, maxlen=N
         for i in range (0, p_count): #stupid code
             sentences_1.append(grid_1)
             
-        #update new number of entity
+       #update new number of entity
         e_count_list.append(e_count)
 
     assert len(sentences_0) == len(sentences_1)
@@ -466,142 +595,6 @@ def adjust_index(X, maxlen=None, window_size=3):
     return X
 
 
-#***************************************************************************#
-#***************************************************************************#
-
-def get_eTrans_with_Entity_name(sent, vocabs):
-    x = sent.split()
-    # print(x)
-    length = len(x)
-    # print(length)
-    e_occur = x.count('X') + x.count('S') + x.count('O')  # counting the number of occurrence of entities
-    # print(e_occur)
-    if length > 80:
-        if e_occur < 3:
-            return ""
-    elif length > 20:
-        if e_occur < 2:
-            return ""
-
-    ent = x[0]
-    # print(ent)
-    x = x[1:]
-
-    new_x = []
-
-    for role in x:
-        if role != "-":
-            if ent in vocabs:
-                new_x.append(ent)
-            else:
-                new_x.append("ovv")
-
-        else:
-            new_x.append("-")
-
-    # print(new_x)
-    return ' '.join(new_x)
 
 
-def load_and_numberize_egrids_entity_names(filelist="list_of_grid.txt", maxlen=10000, w_size=3,
-                                                             E=None, vocabs=None, emb_size=300, perm_num=20):
-    # loading entiry-grid data from list of pos document and list of neg document
-    if vocabs is None:
-        print("Please input vocab list")
-        return None
 
-    list_of_files = [line.rstrip('\n') for line in open(filelist)]
-
-    # process postive gird, convert each file to be a sentence
-    sentences_1 = []
-    sentences_0 = []
-
-    for file in list_of_files:
-        # print(file)
-
-        lines = [line.rstrip('\n') for line in open(file + ".EGrid")]
-        # f_lines = [line.rstrip('\n') for line in open(file + ".Feats")]
-
-        grid_1 = "0 " * w_size
-
-        for idx, line in enumerate(lines):
-            e_trans = get_eTrans_with_Entity_name(line, vocabs)  # merge the grid of positive document
-            if len(e_trans) != 0:
-                # print e_trans
-                grid_1 = grid_1 + e_trans + " " + "0 " * w_size
-
-        p_count = 0
-        for i in range(1, perm_num + 1):  # reading the permuted docs
-            permuted_lines = [p_line.rstrip('\n') for p_line in open(file + ".EGrid" + "-" + str(i))]
-            grid_0 = "0 " * w_size
-
-            for idx, p_line in enumerate(permuted_lines):
-                e_trans_0 = get_eTrans_with_Entity_name(p_line, vocabs)
-                if len(e_trans_0) != 0:
-                    grid_0 = grid_0 + e_trans_0 + " " + "0 " * w_size
-
-            if grid_0 != grid_1:  # check the duplication
-                p_count = p_count + 1
-                sentences_0.append(grid_0)
-            # else:
-            #    print(file+ ".EGrid" +"-"+str(i)) // print duplicates permuted docs with original
-
-        for i in range(0, p_count):  # stupid code
-            sentences_1.append(grid_1)
-
-    assert len(sentences_0) == len(sentences_1)
-
-    vocab_idmap = {}
-
-    for i in range(len(vocabs)):
-        vocab_idmap[vocabs[i]] = i
-
-    # Numberize the sentences
-    X_1 = numberize_sentences(sentences_1, vocab_idmap)
-    X_0 = numberize_sentences(sentences_0, vocab_idmap)
-
-    X_1 = adjust_index(X_1, maxlen=maxlen, window_size=w_size)
-    X_0 = adjust_index(X_0, maxlen=maxlen, window_size=w_size)
-
-    X_1 = sequence.pad_sequences(X_1, maxlen)
-    X_0 = sequence.pad_sequences(X_0, maxlen)
-
-    if E is None:
-        np.random.seed(2018)
-        E = 0.01 * np.random.uniform(-1.0, 1.0, (len(vocabs), emb_size))
-        E[len(vocabs) - 1] = 0
-
-    return X_1, X_0, E
-
-
-def loadGloVe(filename, vocabs):
-    vocab = []
-    embd = []
-    file = open(filename,'r')
-    for line in file.readlines():
-        row = line.strip().split(' ')
-        #vocab.append(row[0])
-        if(row[0] in vocabs):
-            vocab.append(row[0])
-            embd.append(row[1:])
-    print('Loaded GloVe!')
-    file.close()
-    return vocab,embd
-
-
-def load_pretrained_glove(vocabs, filename):
-    vocabs = [x.lower() for x in vocabs]
-    vocab, embd = loadGloVe(filename, vocabs)
-
-    embedding = []
-    for entity in vocabs:
-        if entity in vocab:
-            index = vocab.index(entity)
-            embedding.append(embd[index])
-        else:
-            e = 0.01 * np.random.uniform(-1.0, 1.0, len(embd[0]))
-            embedding.append(e)
-
-    embedding = np.asarray(embedding)
-
-    return embedding

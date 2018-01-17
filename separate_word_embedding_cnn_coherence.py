@@ -15,10 +15,13 @@ def forward_propagation(X_positive_eName, X_negative_eName, X_positive_eType, X_
     Implements forward propagation of Neural coherence model
 
     Arguments:
-    X_positive -- A Placeholder for positive document
-    X_negative -- A Placeholder for negative document
+    X_positive_eName -- A Placeholder for positive document entity name
+    X_negative_eName -- A Placeholder for negative document entity name
+    X_positive_eType -- A Placeholder for positive document entity type
+    X_negative_eType -- A Placeholder for negative document entity type
     vocabs -- List of vocabulary
-    E_1, E_2 -- initialized values for embedding matrix
+    E_1, E_2 -- initialized values for two embedding matrices
+    mode -- whether we are in training: mode=True or testing: mode=False [Used in Batch Normalization].
     print_ -- Whether size of the variables to be printed
 
     Returns:
@@ -267,11 +270,11 @@ def mini_batches(X, Y, mini_batch_size=32, shuffle=False):
 
 if __name__ == '__main__':
     # parse user input
-    print("Starting...17:50")
+    print("Starting Shared Embedding...20:20")
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
-    #[chijkqruvxyz] [ABDGHIJKLMNOQRSTUVWXYZ]
+    #[chijkqruvxyz] [ABDGHIJKLNOQRSTUVWXYZ]
     parser.add_option("-g", "--log-file",   dest="log_file", help="log file [default: %default]")
     parser.add_option("-d", "--data-dir",   dest="data_dir", help="directory containing list of train, test and dev file [default: %default]")
     parser.add_option("-m", "--model-dir",  dest="model_dir", help="directory to save the best models [default: %default]")
@@ -296,7 +299,10 @@ if __name__ == '__main__':
     parser.add_option("-F", "--feats",        dest="f_list", help="semantic features using in the model, separate by . [default: %default]")
     parser.add_option("-S", "--seed",         dest="seed", type="int", help="seed for random number. [default: %default]")
     parser.add_option("-C", "--margin",       dest="margin", type="int", help="margin of the ranking objective. [default: %default]")
-
+    parser.add_option("-M", "--eval_minibatches", dest="eval_minibatches", type="int",
+                      help="How often we want to evaluate in an epoch. [default: %default]")
+    parser.add_option("-P", "--pretrained", dest="pretrained", type="boolean",
+                      help="How often we want to evaluate in an epoch. [default: %default]")
     parser.set_defaults(
 
         data_dir        = "./data/"
@@ -305,10 +311,10 @@ if __name__ == '__main__':
 
         ,learn_alg      = "rmsprop" # sgd, adagrad, rmsprop, adadelta, adam (default)
         ,loss           = "ranking_loss" # hinge, squared_hinge, binary_crossentropy (default)
-        ,minibatch_size = 32
+        ,minibatch_size = 10
         ,dropout_ratio  = 1
 
-        ,maxlen         = 20000
+        ,maxlen         = 25000
         ,epochs         = 2
         ,emb_size_eType = 100
         ,emb_size_eName = 300
@@ -321,6 +327,8 @@ if __name__ == '__main__':
 
         ,seed           = 2018
         ,margin         = 6
+        ,eval_minibatches=50
+        ,pretrained = True
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -334,7 +342,7 @@ if __name__ == '__main__':
     print('Loading vocab of the whole dataset...')
     #vocab = data_helper.load_all(filelist="data/wsj.all")
     entity_type = ['S', 'O', 'X', '-', '0']
-    vocabs = new_data_helper.init_vocab(filelist="./data/wsj.train_dev", occur=100)
+    vocabs = new_data_helper.init_vocab(filelist="./data/wsj.train_dev", occur=90)
     print(len(vocabs))
 
     print("loading entity-grid for pos and neg documents only entity types...")
@@ -374,7 +382,12 @@ if __name__ == '__main__':
         filelist="./data/wsj.test",
         maxlen=opts.maxlen, w_size=opts.w_size, E=E_2, vocabs=vocabs, emb_size=opts.emb_size_eName)
 
+    ###########Pretrained word embedding
+    if opts.pretrained:
+        E_2 = data_helper.load_pretrained_glove(vocabs=vocabs, filename="./glove/glove.6B.300d.txt")
+        print("Shape of pretrained glove: ", E_2.shape)
 
+    ###########################
 
     num_train = len(X_train_1_eName)
     num_dev = len(X_dev_1_eName)
@@ -490,6 +503,74 @@ if __name__ == '__main__':
                     print("Shape: ", v.shape)
                     #print(v)
                 """
+
+                if ((i+1) % opts.eval_minibatches) == 0:
+
+                    # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+                    ########################Test Begins#####################################################
+                    wins_count = 0
+                    ties_count = 0
+                    losses_count = 0
+
+                    #minibatches_test = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+                    minibatches_eType, num_minibatches = mini_batches(X_test_1_eType, X_test_0_eType,
+                                                                      opts.minibatch_size)
+                    minibatches_eName, num_minibatches = mini_batches(X_test_1_eName, X_test_0_eName,
+                                                                      opts.minibatch_size)
+
+
+                    wins = tf.greater(score_positive, score_negative)
+                    number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
+
+                    ties = tf.equal(score_positive, score_negative)
+                    number_ties = tf.reduce_sum(tf.cast(ties, tf.int32))
+
+                    losses = tf.less(score_positive, score_negative)
+                    number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
+
+                    for j in range(num_minibatches):
+                        (minibatch_X_positive_eType, minibatch_X_negative_eType) = minibatches_eType[j]
+                        (minibatch_X_positive_eName, minibatch_X_negative_eName) = minibatches_eName[j]
+
+                        num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
+                                                                  feed_dict={
+                                                                      X_positive_eType: minibatch_X_positive_eType,
+                                                                      X_negative_eType: minibatch_X_negative_eType,
+                                                                      X_positive_eName: minibatch_X_positive_eName,
+                                                                      X_negative_eName: minibatch_X_negative_eName,
+                                                                      mode: False})
+
+                        wins_count += num_wins
+                        ties_count += num_ties
+                        losses_count += num_losses
+
+                    recall = wins_count / (wins_count + ties_count + losses_count)
+
+                    precision = wins_count / (wins_count + losses_count)
+
+                    f1 = 2 * precision * recall / (precision + recall)
+
+                    accuracy = wins_count / (wins_count + ties_count + losses_count)
+
+                    # test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+
+                    # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+                    # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+
+                    print("\n\n")
+                    print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
+
+                    print("Wins: ", wins_count)
+                    print("Ties: ", ties_count)
+                    print("losses: ", losses_count)
+
+                    print(" -Test Accuracy:", accuracy)
+                    print(" -Test F1 Score:", f1)
+
+                    ########################Test Ends#####################################################
+                    # """
+
+
             #print(minibatch_cost)
             #print("******************* End of an epoch ******************************")
             #print("******************* End of Training ******************************")
