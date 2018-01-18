@@ -274,7 +274,7 @@ if __name__ == '__main__':
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
-    #[chijkqruvxyz] [ABDGHIJKLNOQRSTUVWXYZ]
+    #[chijkqruvxyz] [ABDGHIJKLNOQRSUVWXYZ]
     parser.add_option("-g", "--log-file",   dest="log_file", help="log file [default: %default]")
     parser.add_option("-d", "--data-dir",   dest="data_dir", help="directory containing list of train, test and dev file [default: %default]")
     parser.add_option("-m", "--model-dir",  dest="model_dir", help="directory to save the best models [default: %default]")
@@ -301,8 +301,7 @@ if __name__ == '__main__':
     parser.add_option("-C", "--margin",       dest="margin", type="int", help="margin of the ranking objective. [default: %default]")
     parser.add_option("-M", "--eval_minibatches", dest="eval_minibatches", type="int",
                       help="How often we want to evaluate in an epoch. [default: %default]")
-    parser.add_option("-P", "--pretrained", dest="pretrained", type="boolean",
-                      help="How often we want to evaluate in an epoch. [default: %default]")
+    parser.add_option("-T", "--pretrained", dest="pretrained", type="int", help="Whether we are going to use pretrained word embedding. [default: %default]")
     parser.set_defaults(
 
         data_dir        = "./data/"
@@ -315,7 +314,7 @@ if __name__ == '__main__':
         ,dropout_ratio  = 1
 
         ,maxlen         = 25000
-        ,epochs         = 2
+        ,epochs         = 10
         ,emb_size_eType = 100
         ,emb_size_eName = 300
         ,hidden_size    = 250
@@ -328,7 +327,7 @@ if __name__ == '__main__':
         ,seed           = 2018
         ,margin         = 6
         ,eval_minibatches=50
-        ,pretrained = True
+        ,pretrained=1
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -337,7 +336,7 @@ if __name__ == '__main__':
     print("minibatch_size: ", opts.minibatch_size, "  dropout_ratio: ", opts.dropout_ratio,
           "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size_eType: ", opts.emb_size_eType, "  emb_size_eName: ", opts.emb_size_eName, "  hidden_size: ",
           opts.hidden_size, "  nb_filter: ", opts.nb_filter, "  w_size: ", opts.w_size,
-          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin)
+          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin, "  eval_minibatches: ", opts.eval_minibatches)
 
     print('Loading vocab of the whole dataset...')
     #vocab = data_helper.load_all(filelist="data/wsj.all")
@@ -383,11 +382,13 @@ if __name__ == '__main__':
         maxlen=opts.maxlen, w_size=opts.w_size, E=E_2, vocabs=vocabs, emb_size=opts.emb_size_eName)
 
     ###########Pretrained word embedding
-    if opts.pretrained:
+    if opts.pretrained == 1:
         E_2 = data_helper.load_pretrained_glove(vocabs=vocabs, filename="./glove/glove.6B.300d.txt")
         print("Shape of pretrained glove: ", E_2.shape)
 
     ###########################
+
+
 
     num_train = len(X_train_1_eName)
     num_dev = len(X_dev_1_eName)
@@ -513,9 +514,9 @@ if __name__ == '__main__':
                     losses_count = 0
 
                     #minibatches_test = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
-                    minibatches_eType, num_minibatches = mini_batches(X_test_1_eType, X_test_0_eType,
+                    minibatches_eType_test, num_minibatches_test = mini_batches(X_test_1_eType, X_test_0_eType,
                                                                       opts.minibatch_size)
-                    minibatches_eName, num_minibatches = mini_batches(X_test_1_eName, X_test_0_eName,
+                    minibatches_eName_test, num_minibatches_test = mini_batches(X_test_1_eName, X_test_0_eName,
                                                                       opts.minibatch_size)
 
 
@@ -528,9 +529,9 @@ if __name__ == '__main__':
                     losses = tf.less(score_positive, score_negative)
                     number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
 
-                    for j in range(num_minibatches):
-                        (minibatch_X_positive_eType, minibatch_X_negative_eType) = minibatches_eType[j]
-                        (minibatch_X_positive_eName, minibatch_X_negative_eName) = minibatches_eName[j]
+                    for j in range(num_minibatches_test):
+                        (minibatch_X_positive_eType, minibatch_X_negative_eType) = minibatches_eType_test[j]
+                        (minibatch_X_positive_eName, minibatch_X_negative_eName) = minibatches_eName_test[j]
 
                         num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
                                                                   feed_dict={
@@ -568,16 +569,79 @@ if __name__ == '__main__':
                     print(" -Test F1 Score:", f1)
 
                     ########################Test Ends#####################################################
-                    # """
+
 
 
             #print(minibatch_cost)
             #print("******************* End of an epoch ******************************")
             #print("******************* End of Training ******************************")
 
+            # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+            ########################Test Begins#####################################################
+            wins_count = 0
+            ties_count = 0
+            losses_count = 0
+
+            # minibatches_test = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+            minibatches_eType, num_minibatches = mini_batches(X_test_1_eType, X_test_0_eType,
+                                                              opts.minibatch_size)
+            minibatches_eName, num_minibatches = mini_batches(X_test_1_eName, X_test_0_eName,
+                                                              opts.minibatch_size)
+
+            wins = tf.greater(score_positive, score_negative)
+            number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
+
+            ties = tf.equal(score_positive, score_negative)
+            number_ties = tf.reduce_sum(tf.cast(ties, tf.int32))
+
+            losses = tf.less(score_positive, score_negative)
+            number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
+
+            for j in range(num_minibatches):
+                (minibatch_X_positive_eType, minibatch_X_negative_eType) = minibatches_eType[j]
+                (minibatch_X_positive_eName, minibatch_X_negative_eName) = minibatches_eName[j]
+
+                num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
+                                                          feed_dict={
+                                                              X_positive_eType: minibatch_X_positive_eType,
+                                                              X_negative_eType: minibatch_X_negative_eType,
+                                                              X_positive_eName: minibatch_X_positive_eName,
+                                                              X_negative_eName: minibatch_X_negative_eName,
+                                                              mode: False})
+
+                wins_count += num_wins
+                ties_count += num_ties
+                losses_count += num_losses
+
+            recall = wins_count / (wins_count + ties_count + losses_count)
+
+            precision = wins_count / (wins_count + losses_count)
+
+            f1 = 2 * precision * recall / (precision + recall)
+
+            accuracy = wins_count / (wins_count + ties_count + losses_count)
+
+            # test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+
+            # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+            # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+
+            print("\n\n")
+            print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
+
+            print("Wins: ", wins_count)
+            print("Ties: ", ties_count)
+            print("losses: ", losses_count)
+
+            print(" -Test Accuracy:", accuracy)
+            print(" -Test F1 Score:", f1)
+
+            ########################Test Ends#####################################################
+            # """
+
 
             #num_minibatches = int(m / minibatch_size) # number of minibatches of size minibatch_size in the train set
-            #"""
+            """
             wins_count = 0
             ties_count = 0
             losses_count = 0
@@ -636,5 +700,5 @@ if __name__ == '__main__':
             print(" -Test Accuracy:", accuracy)
             print(" -Test F1 Score:", f1)
 
-            #"""
+            """
 

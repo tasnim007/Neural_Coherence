@@ -254,7 +254,7 @@ if __name__ == '__main__':
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
-    #[chijkqruvxyz] [ABDEGHIJKLMNOQRSTUVWXYZ]
+    #[chijkqruvxyz] [ABDEGHIJKLMNOQRSUVWXYZ]
     parser.add_option("-g", "--log-file",   dest="log_file", help="log file [default: %default]")
     parser.add_option("-d", "--data-dir",   dest="data_dir", help="directory containing list of train, test and dev file [default: %default]")
     parser.add_option("-m", "--model-dir",  dest="model_dir", help="directory to save the best models [default: %default]")
@@ -278,8 +278,7 @@ if __name__ == '__main__':
     parser.add_option("-C", "--margin",       dest="margin", type="int", help="margin of the ranking objective. [default: %default]")
     parser.add_option("-M", "--eval_minibatches", dest="eval_minibatches", type="int",
                       help="How often we want to evaluate in an epoch. [default: %default]")
-    parser.add_option("-P", "--pretrained", dest="pretrained", type="boolean",
-                      help="How often we want to evaluate in an epoch. [default: %default]")
+    parser.add_option("-T", "--pretrained", dest="pretrained", type="int", help="Whether we are going to use pretrained word embedding. [default: %default]")
     parser.set_defaults(
 
         data_dir="./data/"
@@ -288,7 +287,7 @@ if __name__ == '__main__':
 
         , learn_alg="rmsprop"  # sgd, adagrad, rmsprop, adadelta, adam (default)
         , loss="ranking_loss"  # hinge, squared_hinge, binary_crossentropy (default)
-        , minibatch_size=32
+        , minibatch_size=10
         , dropout_ratio=1
 
         , maxlen=25000
@@ -304,6 +303,7 @@ if __name__ == '__main__':
         , seed=2018
         , margin=6
         , eval_minibatches=100
+        , pretrained=1
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -333,7 +333,7 @@ if __name__ == '__main__':
 
 
     ###########Pretrained word embedding
-    if opts.pretrained:
+    if opts.pretrained == 1:
         vocab_0 = []
         for ent in vocabs:
             vocab_0.append(ent)
@@ -354,10 +354,10 @@ if __name__ == '__main__':
 
     ###########################
 
-
+    '''
     X_train_1 = np.concatenate((X_train_1, X_dev_1), axis=0)
     X_train_0 = np.concatenate((X_train_0, X_dev_0), axis=0)
-
+    '''
     num_train = len(X_train_1)
     num_dev   = len(X_dev_1)
     num_test  = len(X_test_1)
