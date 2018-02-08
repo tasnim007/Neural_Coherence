@@ -59,8 +59,8 @@ def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
         filter_shape = [w_size, opts.emb_size, opts.nb_filter]
 
         initializer = tf.contrib.layers.xavier_initializer(seed=opts.seed)
-        W_conv_layer[i] = tf.Variable(initializer(filter_shape), name="W_conv_layer"+i)
-        b_conv_layer[i] = tf.Variable(tf.constant(0.0, shape=[opts.nb_filter]), name="b_conv_layer"+i)
+        W_conv_layer[i] = tf.Variable(initializer(filter_shape), name="W_conv_layer"+str(i))
+        b_conv_layer[i] = tf.Variable(tf.constant(0.0, shape=[opts.nb_filter]), name="b_conv_layer"+str(i))
 
 
     for i, w_size in enumerate(filter_sizes):
