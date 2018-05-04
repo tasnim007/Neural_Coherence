@@ -381,23 +381,23 @@ if __name__ == '__main__':
 
         , learn_alg="rmsprop"  # sgd, adagrad, rmsprop, adadelta, adam (default)
         , loss="ranking_loss"  # hinge, squared_hinge, binary_crossentropy (default)
-        , minibatch_size=10
+        , minibatch_size=32
         , dropout_ratio=1
 
-        , maxlen=25000
+        , maxlen=1000
         , epochs=10
         , emb_size=100
         , hidden_size=250
         , nb_filter=150
-        , w_size=10
-        , pool_length=10
+        , w_size=8
+        , pool_length=6
         , p_num=20
-        , f_list=""  # "0.1.3"
+        , f_list="0.1.3"
 
         , seed=2018
-        , margin=6
+        , margin=1
         , eval_minibatches=100
-        , filter_list="8,9,10"
+        , filter_list="5"
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -410,24 +410,32 @@ if __name__ == '__main__':
           , "  eval_minibatches: ", opts.eval_minibatches, "  filter_list: ", opts.filter_list)
 
     print('Loading vocab of the whole dataset...')
-    vocab = data_helper.load_all(filelist="data/wsj.all")
+
+    fn = []
+    if opts.f_list !="":  #stupid arge parsing, do it latter
+        for i in opts.f_list.split("."):
+            fn.append(int(i))
+    else:
+        fn = None
+
+    vocab = data_helper.load_all(filelist="data/wsj.all", fn=fn)
     print(vocab)
 
     print("loading entity-grid for pos and neg documents...")
     X_train_1, X_train_0, E = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.train",
                                                                               perm_num=opts.p_num, maxlen=opts.maxlen,
                                                                               window_size=opts.w_size, vocab_list=vocab,
-                                                                              emb_size=opts.emb_size)
+                                                                              emb_size=opts.emb_size, fn=fn)
 
     X_dev_1, X_dev_0, E = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.dev",
                                                                           perm_num=opts.p_num, maxlen=opts.maxlen,
                                                                           window_size=opts.w_size, E=E,
-                                                                          vocab_list=vocab, emb_size=opts.emb_size)
+                                                                          vocab_list=vocab, emb_size=opts.emb_size, fn=fn)
 
     X_test_1, X_test_0, E = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.test",
                                                                             perm_num=opts.p_num, maxlen=opts.maxlen,
                                                                             window_size=opts.w_size, E=E,
-                                                                            vocab_list=vocab, emb_size=opts.emb_size)
+                                                                            vocab_list=vocab, emb_size=opts.emb_size, fn=fn)
 
     num_train = len(X_train_1)
     num_dev = len(X_dev_1)
@@ -482,6 +490,10 @@ if __name__ == '__main__':
 
     m = num_train
 
+
+    saver = tf.train.Saver(max_to_keep=0)
+    model_dir = './checkpoints' 
+
     with tf.Session() as sess:
 
         sess.run(init)
@@ -502,30 +514,7 @@ if __name__ == '__main__':
                                                   feed_dict={X_positive: minibatch_X_positive,
                                                              X_negative: minibatch_X_negative,
                                                              mode: True})
-                """
-                print("Epoch:", epoch, "Minibatch:", i) 
-                print("Positive score:")
-                print(pos) 
-                print("Negative score:")
-                print(neg)
-                print("ranking loss:", temp_cost)
-
-                print("*************** End of a minibatch **********************************")
-                """
-                # print("Iteration ",i, ":  ",temp_cost)
-                # minibatch_cost += temp_cost / num_minibatches
-
-                """
-                #print(tf.trainable_variables())
-
-                variables_names = [v.name for v in tf.trainable_variables()]
-                values = sess.run(variables_names)
-                for k, v in zip(variables_names, values):
-                    print("Variable: ", k)
-                    print("Shape: ", v.shape)
-                    #print(v)
-                """
-
+                #print(temp_cost) 
                 if ((i + 1) % opts.eval_minibatches) == 0:
 
                     # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -558,17 +547,11 @@ if __name__ == '__main__':
                         losses_count += num_losses
 
                     recall = wins_count / (wins_count + ties_count + losses_count)
-
                     precision = wins_count / (wins_count + losses_count)
-
                     f1 = 2 * precision * recall / (precision + recall)
-
                     accuracy = wins_count / (wins_count + ties_count + losses_count)
-
-                    # test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
-
-                    # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
-                    # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+                    
+                    saver.save(sess, model_dir + '/gridCNN-epoch' + str(epoch) + "-step", global_step=i, write_state=False)
 
                     print("\n\n")
                     print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
@@ -582,10 +565,6 @@ if __name__ == '__main__':
 
                     ########################Test Ends#####################################################
                     # """
-
-            # print(minibatch_cost)
-            # print("******************* End of an epoch ******************************")
-            # print("******************* End of Training ******************************")
 
             # num_minibatches = int(m / minibatch_size) # number of minibatches of size minibatch_size in the train set
             # """
@@ -628,6 +607,8 @@ if __name__ == '__main__':
 
             # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
             # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+
+            saver.save(sess, model_dir + '/gridCNN-epoch' + str(epoch), write_state=False)
 
             print("\n\n")
             print("***********Epoch: ", epoch, "  ******************")
