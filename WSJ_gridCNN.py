@@ -384,7 +384,7 @@ if __name__ == '__main__':
         , minibatch_size=32
         , dropout_ratio=1
 
-        , maxlen=1000
+        , maxlen=25000
         , epochs=10
         , emb_size=100
         , hidden_size=250
@@ -395,7 +395,7 @@ if __name__ == '__main__':
         , f_list="0.1.3"
 
         , seed=2018
-        , margin=1
+        , margin=6
         , eval_minibatches=100
         , filter_list="5"
     )

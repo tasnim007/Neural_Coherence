@@ -94,6 +94,8 @@ def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
 
     ## Third Layer of NN: Pooling Layer
 
+    #maxpooling
+
     # 1D Pooling for positive document
     m_layer_1_positive = tf.nn.pool(h_conv_layer_1_positive, window_shape=[opts.pool_length], strides=[opts.pool_length],
                                     pooling_type='MAX', padding="VALID")
@@ -101,6 +103,22 @@ def forward_propagation(X_positive, X_negative, vocab, E, mode, print_=False):
     # 1D Pooling for negative document
     m_layer_1_negative = tf.nn.pool(h_conv_layer_1_negative, window_shape=[opts.pool_length], strides=[opts.pool_length],
                                     pooling_type='MAX', padding="VALID")
+
+    '''
+    #averagepooling
+    # 1D Pooling for positive document
+    m_avg_layer_1_positive = tf.nn.pool(h_conv_layer_1_positive, window_shape=[opts.pool_length],
+                                    strides=[opts.pool_length],
+                                    pooling_type='AVG', padding="VALID")
+
+    # 1D Pooling for negative document
+    m_avg_layer_1_negative = tf.nn.pool(h_conv_layer_1_negative, window_shape=[opts.pool_length],
+                                    strides=[opts.pool_length],
+                                    pooling_type='AVG', padding="VALID")
+
+    m_layer_1_positive = tf.concat([m_max_layer_1_positive, m_avg_layer_1_positive], 2)
+    m_layer_1_negative = tf.concat([m_max_layer_1_negative, m_avg_layer_1_negative], 2)
+    '''
 
     ## Fourth Layer of NN: Fully Connected Layer
 
@@ -293,7 +311,7 @@ def random_mini_batches(X, Y, mini_batch_size=32):
 
 if __name__ == '__main__':
     # parse user input
-    print("Starting...6:12")
+    print("Starting gridCNN.. 27/01/18 ...20:45")
     parser = optparse.OptionParser("%prog [options]")
 
     #file related options
@@ -319,9 +337,10 @@ if __name__ == '__main__':
     parser.add_option("-F", "--feats",        dest="f_list", help="semantic features using in the model, separate by . [default: %default]")
     parser.add_option("-S", "--seed",         dest="seed", type="int", help="seed for random number. [default: %default]")
     parser.add_option("-C", "--margin",       dest="margin", type="int", help="margin of the ranking objective. [default: %default]")
-
+    parser.add_option("-M", "--eval_minibatches", dest="eval_minibatches", type="int",
+                      help="How often we want to evaluate in an epoch. [default: %default]")
     parser.set_defaults(
-
+        #/data/sls/qcri/asr/sjoty/tasnim/cnn_coherence/saved_models/gridCNN
         data_dir        = "./data/"
         ,log_file       = "log"
         ,model_dir      = "./saved_models/"
@@ -329,20 +348,21 @@ if __name__ == '__main__':
         ,learn_alg      = "rmsprop" # sgd, adagrad, rmsprop, adadelta, adam (default)
         ,loss           = "ranking_loss" # hinge, squared_hinge, binary_crossentropy (default)
         ,minibatch_size = 32
-        ,dropout_ratio  = 0.5
+        ,dropout_ratio  = 1
 
-        ,maxlen         = 14000
-        ,epochs         = 15
+        ,maxlen         = 25000
+        ,epochs         = 5
         ,emb_size       = 100
         ,hidden_size    = 250
         ,nb_filter      = 150
-        ,w_size         = 6
-        ,pool_length    = 6
+        ,w_size         = 10
+        ,pool_length    = 10
         ,p_num          = 20
-        ,f_list         = "" #"0.1.3"
+        ,f_list         = "0.1.3"
 
         ,seed           = 2018
-        ,margin         = 1
+        ,margin         = 6
+        ,eval_minibatches=100
     )
 
     opts, args = parser.parse_args(sys.argv)
@@ -351,22 +371,31 @@ if __name__ == '__main__':
     print("minibatch_size: ", opts.minibatch_size, "  dropout_ratio: ", opts.dropout_ratio,
           "  maxlen: ", opts.maxlen, "  epochs: ", opts.epochs, "  emb_size: ", opts.emb_size, "  hidden_size: ",
           opts.hidden_size, "  nb_filter: ", opts.nb_filter, "  w_size: ", opts.w_size,
-          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin)
+          "  pool_length: ", opts.pool_length, "  p_num: ", opts.p_num, "  seed: ", opts.seed, "  margin: ", opts.margin
+          , "  eval_minibatches: ", opts.eval_minibatches)
 
     print('Loading vocab of the whole dataset...')
-    vocab = data_helper.load_all(filelist="data/wsj.all")
+    fn = []
+    if opts.f_list !="":  #stupid arge parsing, do it latter
+        for i in opts.f_list.split("."):
+            fn.append(int(i))
+    else:
+        fn = None
+
+
+    vocab = data_helper.load_all(filelist="data/wsj.all", fn=fn)
     print(vocab)
 
 
     print("loading entity-grid for pos and neg documents...")
     X_train_1, X_train_0, E = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.train",
-            perm_num=opts.p_num, maxlen=opts.maxlen, window_size=opts.w_size, vocab_list=vocab, emb_size=opts.emb_size)
+            perm_num=opts.p_num, maxlen=opts.maxlen, window_size=opts.w_size, vocab_list=vocab, emb_size=opts.emb_size, fn=fn)
 
     X_dev_1, X_dev_0, E    = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.dev",
-            perm_num=opts.p_num, maxlen=opts.maxlen, window_size=opts.w_size, E = E, vocab_list=vocab, emb_size=opts.emb_size)
+            perm_num=opts.p_num, maxlen=opts.maxlen, window_size=opts.w_size, E = E, vocab_list=vocab, emb_size=opts.emb_size, fn=fn)
 
     X_test_1, X_test_0, E    = data_helper.load_and_numberize_Egrid_with_Feats("data/wsj.test",
-            perm_num=opts.p_num, maxlen=opts.maxlen, window_size=opts.w_size, E = E, vocab_list=vocab, emb_size=opts.emb_size)
+            perm_num=opts.p_num, maxlen=opts.maxlen, window_size=opts.w_size, E = E, vocab_list=vocab, emb_size=opts.emb_size, fn=fn)
 
 
 
@@ -397,7 +426,7 @@ if __name__ == '__main__':
     ## Create Placeholders
     X_positive = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for positive document
     X_negative = tf.placeholder(tf.int32, shape = [None, opts.maxlen]) #Placeholder for negative document
-    mode = tf.placeholder(tf.bool, name='mode')
+    mode = tf.placeholder(tf.bool, name='mode')  #Placeholder needed for batch normalization
 
     # Forward propagation
     score_positive, score_negative, parameters = forward_propagation(X_positive, X_negative, vocab, E, mode, print_=True)
@@ -423,11 +452,15 @@ if __name__ == '__main__':
 
 
 
+
     init = tf.global_variables_initializer()
 
     m = num_train
 
     with tf.Session() as sess:
+
+        saver = tf.train.Saver()
+        best_accuracy = 0.840
 
         sess.run(init)
 
@@ -469,6 +502,70 @@ if __name__ == '__main__':
                     print("Shape: ", v.shape)
                     #print(v)
                 """
+
+                if ((i+1) % opts.eval_minibatches) == 0:
+
+                    # """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+                    ########################Test Begins#####################################################
+                    wins_count = 0
+                    ties_count = 0
+                    losses_count = 0
+
+                    #minibatches_test = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+                    minibatches_test = mini_batches(X_dev_1, X_dev_0, opts.minibatch_size)
+
+                    wins = tf.greater(score_positive, score_negative)
+                    number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
+
+                    ties = tf.equal(score_positive, score_negative)
+                    number_ties = tf.reduce_sum(tf.cast(ties, tf.int32))
+
+                    losses = tf.less(score_positive, score_negative)
+                    number_losses = tf.reduce_sum(tf.cast(losses, tf.int32))
+
+                    for (j, minibatch_test) in enumerate(minibatches_test):
+                        (minibatch_X_positive, minibatch_X_negative) = minibatch_test
+
+                        num_wins, num_ties, num_losses = sess.run([number_wins, number_ties, number_losses],
+                                                                  feed_dict={X_positive: minibatch_X_positive,
+                                                                             X_negative: minibatch_X_negative,
+                                                                             mode: False})
+
+                        wins_count += num_wins
+                        ties_count += num_ties
+                        losses_count += num_losses
+
+                    recall = wins_count / (wins_count + ties_count + losses_count)
+
+                    precision = wins_count / (wins_count + losses_count)
+
+                    f1 = 2 * precision * recall / (precision + recall)
+
+                    accuracy = wins_count / (wins_count + ties_count + losses_count)
+
+                    if (accuracy > best_accuracy):
+                        best_accuracy = accuracy
+                        name = opts.model_dir + "gridCNN_epoch_" + str(epoch) + "_minibatch_" + str(i)
+                        saver.save(sess, name)
+
+                    # test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+
+                    # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
+                    # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
+
+                    print("\n\n")
+                    print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
+
+                    print("Wins: ", wins_count)
+                    print("Ties: ", ties_count)
+                    print("losses: ", losses_count)
+
+                    print(" -Test Accuracy:", accuracy)
+                    print(" -Test F1 Score:", f1)
+
+                    ########################Test Ends#####################################################
+                    # """
+
             #print(minibatch_cost)
             #print("******************* End of an epoch ******************************")
             #print("******************* End of Training ******************************")
@@ -480,7 +577,8 @@ if __name__ == '__main__':
             ties_count = 0
             losses_count = 0
 
-            minibatches = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+            #minibatches = mini_batches(X_test_1, X_test_0, opts.minibatch_size)
+            minibatches_test = mini_batches(X_dev_1, X_dev_0, opts.minibatch_size)
 
             wins = tf.greater(score_positive, score_negative)
             number_wins = tf.reduce_sum(tf.cast(wins, tf.int32))
@@ -514,6 +612,10 @@ if __name__ == '__main__':
 
             accuracy = wins_count/(wins_count + ties_count + losses_count)
 
+            if (accuracy > best_accuracy):
+                best_accuracy = accuracy
+                name = opts.model_dir + "gridCNN_epoch_" + str(epoch) + "_minibatch_" + str(i)
+                saver.save(sess, name)
 
             #test_accuracy, test_f1 = sess.run([accuracy, f1], feed_dict={X_positive:X_test_1, X_negative:X_test_0})
 
