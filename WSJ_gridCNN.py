@@ -384,7 +384,7 @@ if __name__ == '__main__':
         , minibatch_size=32
         , dropout_ratio=1
 
-        , maxlen=25000
+        , maxlen=14000
         , epochs=5
         , emb_size=100
         , hidden_size=250
@@ -551,7 +551,7 @@ if __name__ == '__main__':
                     f1 = 2 * precision * recall / (precision + recall)
                     accuracy = wins_count / (wins_count + ties_count + losses_count)
                     
-                    saver.save(sess, model_dir + '/gridCNN-w_size' + str(opts.window_size) + "-pool_size" + str(opts.pool_length) +  "-epoch" + str(epoch) + "-step", global_step=i, write_state=False)
+                    saver.save(sess, model_dir + '/gridCNN-w_size' + str(opts.w_size) + "-pool_size" + str(opts.pool_length) +  "-epoch" + str(epoch) + "-step", global_step=i, write_state=False)
 
                     print("\n\n")
                     print("***********Epoch: ", epoch, "    Minibatch: ", i, "  ******************")
@@ -608,7 +608,7 @@ if __name__ == '__main__':
             # accuracy.eval(feed_dict={X_positive:X_test_1, X_negative:X_test_0})
             # test_f1 = f1.eval({X_positive:X_test_1, X_negative:X_test_0})
 
-            saver.save(sess, model_dir + '/gridCNN-w_size' + str(opts.window_size) + "-pool_size" + str(opts.pool_length) + 'epoch' + str(epoch), write_state=False)
+            saver.save(sess, model_dir + '/gridCNN-w_size' + str(opts.w_size) + "-pool_size" + str(opts.pool_length) + 'epoch' + str(epoch), write_state=False)
 
             print("\n\n")
             print("***********Epoch: ", epoch, "  ******************")
