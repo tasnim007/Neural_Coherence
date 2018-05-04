@@ -389,7 +389,7 @@ if __name__ == '__main__':
         , emb_size=100
         , hidden_size=250
         , nb_filter=150
-        , w_size=10
+        , w_size=8
         , pool_length=8
         , p_num=20
         , f_list="0.1.3"
@@ -397,7 +397,7 @@ if __name__ == '__main__':
         , seed=2018
         , margin=6
         , eval_minibatches=100
-        , filter_list="10"
+        , filter_list="8"
     )
 
     opts, args = parser.parse_args(sys.argv)
